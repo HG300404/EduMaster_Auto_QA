@@ -1,0 +1,9 @@
+{
+  "name": "edumaster-automation",
+  "version": "1.0.0",
+  "description": "EduMaster QA Automation Framework",
+  "devDependencies": {
+    "@playwright/test": "^1.42.1",
+    "typescript": "^5.0.0"
+  }
+}

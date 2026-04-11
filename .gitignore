@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/
+*.log
+
+# Node & Playwright
+node_modules/
+dist/
+.npm/
+playwright-report/
+test-results/
+test-reports/
+
+# Environment & Secrets
+.env
+.env.local
+*.env*
+.python-version
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Reports
+reports/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

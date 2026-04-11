@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:15
+    container_name: edumaster-postgres-test
+    environment:
+      - POSTGRES_DB=edumaster_test
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d edumaster_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: E:/DATTTT/edumaster_podman/edumaster/backend
+      dockerfile: Dockerfile
+    container_name: edumaster-backend-test
+    command: ["sh", "-c", "tr -d '\\r' < ./entrypoint.sh > ./run.sh && chmod +x ./run.sh && ./run.sh"]
+    volumes:
+      - ../../edumaster_podman/edumaster/infrastructure/scripts/entrypoint.sh:/app/entrypoint.sh
+    environment:
+      - DATABASE_URL=postgresql://test:test@postgres-test:5432/edumaster_test
+      - FLASK_ENV=testing
+      - FLASK_APP=app:create_app()
+      - FLASK_DEBUG=1
+    depends_on:
+      - postgres-test
+
+  frontend:
+    build:
+      context: E:/DATTTT/edumaster_podman/edumaster/frontend
+      dockerfile: Dockerfile
+    container_name: edumaster-frontend-test
+    environment:
+      - VITE_API_URL=http://backend:8000
+    depends_on:
+      - backend
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: edumaster-test-runner
+    environment:
+      - BASE_URL=http://frontend:80
+      - API_URL=http://backend:8000
+      - DATABASE_URL=postgresql://test:test@postgres-test:5432/edumaster_test
+    depends_on:
+      - postgres-test
+      - backend
+      - frontend
+    volumes:
+      - ./tests:/app/tests
+      - ./playwright.config.ts:/app/playwright.config.ts
+      - ./pytest.ini:/app/pytest.ini
+      - ./reports:/app/reports
+      - ./playwright-report:/app/playwright-report
+      - ../../edumaster_podman/edumaster/backend:/app/backend
+    working_dir: /app
+    command: ["/bin/bash", "-c", "mkdir -p reports && chmod +x ./scripts/*.sh && ./scripts/run-tests.sh"]
