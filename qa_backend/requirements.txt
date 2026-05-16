@@ -1,0 +1,22 @@
+fastapi
+uvicorn
+sqlalchemy
+asyncpg
+pydantic
+pydantic-settings
+psycopg2-binary
+pytest-json-report
+
+# Test Execution dependencies (synced from qa_core)
+pytest==8.0.0
+pytest-xdist==3.5.0
+pytest-rerunfailures==13.0
+requests==2.31.0
+faker==22.6.0
+python-dotenv==1.0.0
+flask==3.0.2
+flask-migrate==4.0.7
+flask-sqlalchemy==3.1.1
+email-validator>=2.0.0
+pytest-html==4.1.1
+PyJWT==2.8.0

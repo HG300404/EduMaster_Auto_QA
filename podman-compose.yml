@@ -1,6 +1,13 @@
 version: '3.8'
 
+networks:
+  sut-network:
+  tms-network:
+
 services:
+  # ==========================================
+  # SYSTEM UNDER TEST (SUT)
+  # ==========================================
   postgres-test:
     image: postgres:15
     container_name: edumaster-postgres-test
@@ -13,13 +20,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - sut-network
 
   backend:
     build:
       context: E:/DATTTT/edumaster_podman/edumaster/backend
       dockerfile: Dockerfile
     container_name: edumaster-backend-test
-    command: ["sh", "-c", "tr -d '\\r' < ./entrypoint.sh > ./run.sh && chmod +x ./run.sh && ./run.sh"]
+    command: ["sh", "-c", "tr -d '\r' < ./entrypoint.sh > ./run.sh && chmod +x ./run.sh && ./run.sh"]
     volumes:
       - ../../edumaster_podman/edumaster/infrastructure/scripts/entrypoint.sh:/app/entrypoint.sh
     environment:
@@ -29,6 +38,8 @@ services:
       - FLASK_DEBUG=1
     depends_on:
       - postgres-test
+    networks:
+      - sut-network
 
   frontend:
     build:
@@ -39,26 +50,59 @@ services:
       - VITE_API_URL=http://backend:8000
     depends_on:
       - backend
+    networks:
+      - sut-network
 
-  test-runner:
-    build:
-      context: .
-      dockerfile: Containerfile
-    container_name: edumaster-test-runner
+  # ==========================================
+  # TEST MANAGEMENT SYSTEM (TMS)
+  # ==========================================
+  qa-db:
+    image: postgres:15
+    container_name: qa-postgres
+    restart: always
+    ports:
+      - "5433:5432"
     environment:
-      - BASE_URL=http://frontend:80
-      - API_URL=http://backend:8000
-      - DATABASE_URL=postgresql://test:test@postgres-test:5432/edumaster_test
+      - POSTGRES_DB=qa_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    networks:
+      - tms-network
+
+  qa-backend:
+    build: ./qa_backend
+    container_name: qa-backend
+    restart: always
     depends_on:
-      - postgres-test
-      - backend
-      - frontend
+      - qa-db
+    env_file:
+      - ./qa_backend/.env
+    ports:
+      - "8001:8000"
     volumes:
-      - ./tests:/app/tests
-      - ./playwright.config.ts:/app/playwright.config.ts
-      - ./pytest.ini:/app/pytest.ini
-      - ./reports:/app/reports
-      - ./playwright-report:/app/playwright-report
-      - ../../edumaster_podman/edumaster/backend:/app/backend
-    working_dir: /app
-    command: ["/bin/bash", "-c", "mkdir -p reports && chmod +x ./scripts/*.sh && ./scripts/run-tests.sh"]
+      - ./qa_backend/app:/app/app
+      - ./qa_backend/seed.py:/app/seed.py
+      - ./qa_core/tests:/app/tests
+      - ./qa_core/tests/logs:/app/tests/logs
+      - ./qa_core/reports:/app/reports
+      - ./qa_core/pytest.ini:/app/pytest.ini
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tms-network
+      - sut-network
+
+  qa-frontend:
+    build: ./qa_frontend
+    container_name: qa-frontend
+    restart: always
+    ports:
+      - "3001:5173"
+    volumes:
+      - ./qa_frontend:/app
+      - /app/node_modules
+    networks:
+      - tms-network

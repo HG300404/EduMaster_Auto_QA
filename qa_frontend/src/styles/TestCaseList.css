@@ -1,0 +1,90 @@
+@reference "../index.css";
+
+/* ==========================================================================
+   TestCaseList Page Stylesheet (qa_frontend/src/styles/TestCaseList.css)
+   ========================================================================== */
+
+.tcl-container {
+  @apply space-y-6 pb-12;
+  animation: fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Page Header and Title Container */
+.tcl-header {
+  @apply flex flex-col sm:flex-row sm:items-center justify-between gap-4;
+}
+
+/* Quick Status Metrics Cards Grid */
+.tcl-grid-3col {
+  @apply grid grid-cols-3 gap-6;
+}
+
+.tcl-metric-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-2 text-center;
+}
+
+/* Search and Tab Filters Wrapper */
+.tcl-controls-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-4;
+}
+
+.tcl-tabs-wrapper {
+  @apply flex bg-[#F5F7FA] p-1.5 rounded-lg border border-[#EDEDED];
+}
+
+.tcl-tab-btn {
+  @apply px-4 py-1.5 rounded-md text-xs font-bold transition-all;
+}
+
+.tcl-search-wrapper {
+  @apply w-full md:w-80 relative;
+}
+
+.tcl-search-input {
+  @apply w-full bg-zinc-50 border border-zinc-200 focus:border-[#BAE0FF] rounded-lg h-9 pl-9 pr-3 text-xs font-semibold text-[#1F1F1F] transition-colors outline-none;
+}
+
+/* List Table Structure */
+.tcl-table-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-4;
+}
+
+.tcl-table-header {
+  @apply bg-[#FAFAFA] text-[#8C8C8C] font-bold text-[11px] uppercase py-3 px-4;
+}
+
+.tcl-table-cell-id {
+  @apply font-semibold text-[#8C8C8C] py-4 px-4;
+}
+
+.tcl-table-cell-title {
+  @apply font-bold text-[#1F1F1F] py-4 px-4 text-sm;
+}
+
+.tcl-table-cell-path {
+  @apply flex items-center gap-1.5 font-mono text-xs text-[#595959] bg-[#F5F7FA] border border-[#EDEDED] px-2 py-1.5 rounded-md max-w-sm overflow-hidden text-ellipsis;
+}
+
+/* Custom Execute Buttons */
+.tcl-run-btn {
+  @apply font-bold text-xs h-8 px-4 rounded-md border border-[#91CAFF] bg-[#E6F4FF] text-[#1677FF] hover:bg-[#1677FF] hover:text-white transition-colors flex items-center justify-center gap-1.5;
+}
+
+/* Dialog Overlay Modal */
+.tcl-modal-overlay {
+  @apply fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50;
+  animation: fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.tcl-modal-container {
+  @apply bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative font-sans space-y-4 border border-[#EDEDED];
+}
+
+/* Form Inputs and Select Boxes */
+.tcl-input {
+  @apply w-full bg-zinc-50 focus:bg-white border border-zinc-200 focus:border-[#BAE0FF] rounded-lg h-10 px-3 text-xs font-semibold text-[#1F1F1F] transition-colors outline-none;
+}
+
+.tcl-select {
+  @apply w-full bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 focus:border-[#BAE0FF] rounded-lg h-10 px-3 text-xs font-semibold text-[#1F1F1F] transition-colors outline-none;
+}
