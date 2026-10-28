@@ -1,0 +1,130 @@
+@reference "../index.css";
+
+/* ==========================================================================
+   TestRunDetail Page Stylesheet (qa_frontend/src/styles/TestRunDetail.css)
+   ========================================================================== */
+
+.trd-container {
+  @apply space-y-6 pb-16;
+  animation: fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Page Header Controls */
+.trd-header {
+  @apply flex flex-col md:flex-row md:items-center justify-between gap-4;
+}
+
+.trd-meta-header {
+  @apply flex items-center gap-2;
+}
+
+.trd-status-failed-badge {
+  @apply text-[10px] font-extrabold bg-[#FF4D4F]/10 text-[#FF4D4F] px-2.5 py-1 rounded-md uppercase tracking-wider;
+}
+
+/* Rerun Button Trigger */
+.trd-rerun-btn {
+  @apply bg-[#1677FF] text-white text-xs font-bold h-9 px-4 rounded-md flex items-center justify-center gap-1.5 disabled:opacity-50;
+}
+
+/* Main Two-Column Layout */
+.trd-grid-3col {
+  @apply grid grid-cols-1 lg:grid-cols-3 gap-6;
+}
+
+/* Timeline/Step-by-step Wrapper */
+.trd-step-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-4;
+}
+
+.trd-step-item-failed {
+  @apply relative rounded-xl border p-4 transition-all border-[#FF4D4F] bg-[#FF4D4F]/[0.02];
+}
+
+.trd-step-item-passed {
+  @apply relative rounded-xl border p-4 transition-all border-[#EDEDED] hover:border-[#BAE0FF];
+}
+
+/* Bullets and circle indices */
+.trd-step-bullet-failed {
+  @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0 mt-0.5 bg-[#FF4D4F] text-white;
+}
+
+.trd-step-bullet-passed {
+  @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0 mt-0.5 bg-[#E6F4FF] text-[#1677FF];
+}
+
+/* Trace errors box */
+.trd-step-error-detail {
+  @apply mt-4 bg-[#FF4D4F]/[0.03] border border-[#FF4D4F]/30 rounded-lg p-3 text-xs font-semibold font-mono text-[#FF4D4F] leading-relaxed;
+}
+
+/* Screenshot At Failure Frame */
+.trd-screenshot-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-4;
+}
+
+.trd-screenshot-container {
+  @apply relative w-full aspect-video bg-zinc-950 rounded-xl overflow-hidden flex items-center justify-center border border-[#EDEDED];
+}
+
+.trd-screenshot-viewport {
+  @apply overflow-auto;
+}
+
+.trd-screenshot-zoom-wrap {
+  @apply flex min-w-full min-h-full items-start justify-center p-3;
+}
+
+.trd-screenshot-image {
+  @apply h-auto max-w-none object-contain transition-[width] duration-200 ease-out;
+}
+
+.trd-screenshot-header {
+  @apply absolute top-0 inset-x-0 h-8 border-b border-zinc-800 bg-zinc-900 flex items-center px-4 gap-2;
+}
+
+.trd-screenshot-address {
+  @apply bg-zinc-800 text-[10px] text-zinc-500 font-semibold px-4 py-0.5 rounded-md w-96 text-center mx-auto truncate font-mono;
+}
+
+.trd-screenshot-overlay {
+  @apply relative z-10 flex flex-col items-center space-y-4;
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.trd-screenshot-icon-box {
+  @apply w-20 h-20 rounded-2xl bg-[#FF4D4F]/10 border border-[#FF4D4F]/40 flex items-center justify-center text-[#FF4D4F] shadow-lg;
+}
+
+/* Run Environment Panel */
+.trd-env-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-4;
+}
+
+.trd-env-mock-frame {
+  @apply w-full h-24 bg-white border border-zinc-200 rounded-md overflow-hidden shadow-xs relative flex items-center justify-center;
+}
+
+/* Monospace Live Terminal Card */
+.trd-terminal-card {
+  @apply bg-black border border-zinc-900 rounded-xl text-zinc-100 p-4 font-mono shadow-xl relative overflow-hidden;
+}
+
+.trd-terminal-viewport {
+  @apply h-64 overflow-y-auto text-xs space-y-1.5 leading-relaxed tracking-wide pr-1 select-text;
+  scrollbar-width: thin;
+}
+
+/* System Labels Badge List */
+.trd-labels-card {
+  @apply bg-white border border-[#EDEDED] rounded-xl shadow-xs p-4;
+}
+
+.trd-label-badge-blue {
+  @apply px-3 py-1 bg-blue-50 text-blue-600 rounded-md border border-blue-100 uppercase tracking-wider font-extrabold text-[10px];
+}
+
+.trd-label-badge-yellow {
+  @apply px-3 py-1 bg-amber-50 text-[#FAAD14] rounded-md border border-amber-100 uppercase tracking-wider font-extrabold text-[10px];
+}

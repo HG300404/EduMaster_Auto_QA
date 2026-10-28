@@ -1,21 +1,66 @@
-TARGET=${1:-all}
+#!/usr/bin/env bash
+# Phase 4 — unified test runner (Linux / CI inside qa-backend container)
+set -euo pipefail
 
-echo "--- Starting Test Suite: $TARGET ---"
-mkdir -p reports
+TARGET="${1:-smoke}"
+WORKDIR="/app/qa_core"
+mkdir -p "${WORKDIR}/reports"
 
-# Step 1: Migration (Always needed for fresh DB)
-echo "Step 1: Database Migration..."
-python3 tests/infrastructure/migrate_test_db.py
+run_api() {
+  local marker="$1"
+  if [[ "${marker}" == "smoke" ]]; then
+    pytest tests/api -m smoke \
+      --junitxml=reports/api-smoke-results.xml -q --tb=short
+  else
+    pytest tests/api \
+      --junitxml=reports/api-regression-results.xml -q --tb=short
+  fi
+}
 
-if [ "$TARGET" == "api" ] || [ "$TARGET" == "all" ]; then
-    echo "Step 2: API Tests (Pytest)..."
-    pytest tests/api --junitxml=reports/api-results.xml || echo "API Tests Failed"
-fi
+run_ui() {
+  local mode="$1"
+  if [[ "${mode}" == "smoke" ]]; then
+    PLAYWRIGHT_JUNIT_OUTPUT_NAME=reports/ui-smoke-results.xml \
+      npx playwright test tests/ui/specs --grep @smoke \
+      --workers=1 --reporter=line --reporter=junit
+  else
+    PLAYWRIGHT_JUNIT_OUTPUT_NAME=reports/ui-regression-results.xml \
+      npx playwright test tests/ui/specs \
+      --workers=1 --reporter=line --reporter=junit
+  fi
+}
 
-if [ "$TARGET" == "ui" ] || [ "$TARGET" == "all" ]; then
-    echo "Step 3: UI Tests (Playwright)..."
-    export BASE_URL=http://frontend-test:80
-    npx playwright test --config=playwright.config.ts --reporter=line,junit:reports/ui-results.xml || echo "UI Tests Failed"
-fi
+cd "${WORKDIR}"
 
-echo "--- Test Suite Completed: $TARGET ---"
+case "${TARGET}" in
+  smoke)
+    echo "--- Smoke: API ---"
+    run_api smoke
+    echo "--- Smoke: UI ---"
+    run_ui smoke
+    ;;
+  regression|all)
+    echo "--- Full regression: API ---"
+    run_api regression
+    echo "--- Full regression: UI ---"
+    run_ui regression
+    ;;
+  api-smoke)
+    run_api smoke
+    ;;
+  api)
+    run_api regression
+    ;;
+  ui-smoke)
+    run_ui smoke
+    ;;
+  ui)
+    run_ui regression
+    ;;
+  *)
+    echo "Usage: $0 [smoke|regression|api-smoke|api|ui-smoke|ui]"
+    exit 1
+    ;;
+esac
+
+echo "--- Done: ${TARGET} ---"

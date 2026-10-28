@@ -1,11 +1,12 @@
-# scripts/04_run_ui.ps1
 param (
-    [string]$SpecPath = "" # Optional path to target specific spec file
+    [string]$SpecPath = "tests/ui/specs",
+    [switch]$Smoke
 )
 
-Write-Host "Running UI Tests (Playwright)" -ForegroundColor Cyan
+$grepArg = if ($Smoke) { "--grep @smoke" } else { "" }
+Write-Host "Running UI Tests (Playwright) $(if ($Smoke) { 'smoke' } else { 'full' })" -ForegroundColor Cyan
 
-# Run playwright tests inside the ephemeral test-runner container
-podman-compose run --rm -e BASE_URL=http://frontend:80 test-runner npx playwright test $SpecPath --config=playwright.config.ts
+$cmd = "cd /app/qa_core && npx playwright test $SpecPath $grepArg --workers=1 --config=playwright.config.ts"
+podman-compose exec -e BASE_URL=http://frontend:80 qa-backend bash -c $cmd
 
 Write-Host "UI test execution finished." -ForegroundColor Green

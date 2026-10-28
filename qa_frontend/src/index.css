@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+/* Inter Font Family from CDN */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  /* Primary light blue / cyan tones */
+  --color-primary-50: #E6F4FF;
+  --color-primary-100: #BAE0FF;
+  --color-primary-200: #91CAFF;
+  --color-primary-500: #1677FF; /* Standard active blue */
+  --color-primary-600: #0958D9;
+  
+  /* App backgrounds */
+  --color-bg-main: #F5F7FA;
+  --color-bg-card: #FFFFFF;
+  
+  /* Status accent colors */
+  --color-success: #52C41A;
+  --color-error: #FF4D4F;
+  --color-warning: #FAAD14;
+  --color-info: #1677FF;
+  
+  /* Terminal / Log Panel colors */
+  --color-terminal-bg: #000000;
+  --color-terminal-text: #D9F7BE;
+  --color-terminal-error: #FF7875;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg-main);
+  color: #1F1F1F;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  border-inline: none !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom premium scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E1E4E8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C1C7D0;
+}
+
+/* Custom animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Status dots and indicators */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Terminal Styles */
+.terminal-container {
+  background-color: var(--color-terminal-bg);
+  color: var(--color-terminal-text);
+  font-family: var(--font-mono);
+}
+
+.terminal-error-text {
+  color: var(--color-terminal-error);
+}
+
+/* Card hover and micro-interactions */
+.premium-card {
+  background-color: var(--color-bg-card);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+  border: 1px solid #EDEDED;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.premium-card:hover {
+  box-shadow: 0 10px 24px -4px rgba(0, 0, 0, 0.06), 0 4px 12px -2px rgba(0, 0, 0, 0.03);
+  transform: translateY(-2px);
+}

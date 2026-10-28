@@ -42,7 +42,12 @@ EduMaster_Auto_QA/
 │   └── ui/                 
 │       ├── pages/          # Page Object Model (POM) - Khai báo phần tử UI
 │       └── specs/          # Test script thực tế (Playwright)
-├── docs/                   # Tài liệu hướng dẫn & Test cases
+├── Docs/                   # Tài liệu hướng dẫn & thiết kế hệ thống
+│   ├── COMPREHENSIVE_GUIDE.md # Báo cáo tổng thể
+│   ├── activity_diagrams.md  # Sơ đồ hoạt động (Activity Diagrams)
+│   ├── sequence_diagrams.md  # Sơ đồ trình tự (Sequence Diagrams)
+│   ├── system_architecture.md # Kiến trúc hệ thống
+│   └── flow_analysis.md      # Phân tích luồng chạy thực tế
 ├── reports/                # Nơi xuất báo cáo (JUnit XML, HTML)
 ├── playwright-report/      # Báo cáo HTML trực quan của Playwright
 ├── podman-compose.yml      # Định nghĩa hạ tầng container

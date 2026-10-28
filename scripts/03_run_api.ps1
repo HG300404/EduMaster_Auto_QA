@@ -1,11 +1,14 @@
-# scripts/03_run_api.ps1
 param (
-    [string]$TestPath = "tests/api" # Default to all API tests if no argument is provided
+    [string]$TestPath = "tests/api",
+    [switch]$Smoke
 )
 
-Write-Host "Running API Tests: $($TestPath)" -ForegroundColor Cyan
+$marker = if ($Smoke) { "-m smoke" } else { "" }
+Write-Host "Running API Tests: $TestPath $(if ($Smoke) { '(smoke)' })" -ForegroundColor Cyan
 
-# Run pytest inside the ephemeral test-runner container
-podman-compose run --rm test-runner pytest $TestPath --junitxml=reports/api-results.xml
+$pytestArgs = @($TestPath, "--junitxml=reports/api-results.xml", "--html=reports/api-report.html", "--self-contained-html")
+if ($Smoke) { $pytestArgs = @("-m", "smoke") + $pytestArgs }
+
+podman-compose exec --workdir /app/qa_core qa-backend pytest @pytestArgs
 
 Write-Host "API test execution finished." -ForegroundColor Green
