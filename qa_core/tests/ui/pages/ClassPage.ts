@@ -1,4 +1,12 @@
+// @project: EDUMASTER
+// @module: LMS
+// @type: UI-E2E
+
 import { Page, Locator, expect } from '@playwright/test';
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export class ClassPage {
     readonly page: Page;
@@ -44,53 +52,85 @@ export class ClassPage {
         await this.page.waitForLoadState('networkidle');
     }
 
-    async createClass(classData: { name: string, course: string, teacher?: string }) {
+    async createClass(classData: { name: string, course: string; teacher?: string }): Promise<string> {
+        const classCreated = this.page.waitForResponse(
+            (res) =>
+                res.url().includes('/api/class') &&
+                res.request().method() === 'POST' &&
+                res.ok(),
+            { timeout: 20000 }
+        );
+
         await this.addClassBtn.click();
         await this.nameInput.fill(classData.name);
-        
-        // Select Course
+
         await this.courseSelect.click();
-        const courseOption = this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
-            .nth(0)
+        const courseDropdown = this.page
+            .locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
+            .last();
+        await courseDropdown
             .locator('.ant-select-item-option-content')
             .filter({ hasText: classData.course })
-            .nth(0);
-        await courseOption.evaluate(el => (el as HTMLElement).click());
+            .first()
+            .evaluate((el) => (el as HTMLElement).click());
 
         if (classData.teacher) {
             await this.teacherSelect.click();
-            const teacherOption = this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
-                .nth(0)
+            const teacherDropdown = this.page
+                .locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
+                .last();
+            await teacherDropdown
                 .locator('.ant-select-item-option-content')
                 .filter({ hasText: classData.teacher })
-                .nth(0);
-            await teacherOption.evaluate(el => (el as HTMLElement).click());
+                .first()
+                .evaluate((el) => (el as HTMLElement).click());
         }
 
         await this.submitBtn.click();
-        await expect(this.page.locator('.ant-message-success').nth(0)).toBeVisible();
-        await this.page.locator('.ant-message-success').nth(0).waitFor({ state: 'hidden' });
+        const createResponse = await classCreated;
+        const created = await createResponse.json();
+        await expect(this.page.getByText(/Class created/i)).toBeVisible({ timeout: 10000 });
+
+        return created.id as string;
     }
 
     async findClassRow(className: string) {
-        let row = this.page.locator('tr.ant-table-row').filter({ hasText: className }).nth(0);
-        
-        if (await row.count() === 0) {
-            const paginationItems = this.page.locator('.ant-pagination-item');
-            if (await paginationItems.count() > 1) {
-                await paginationItems.last().click();
-                await this.page.waitForSelector('.ant-spin-spinning', { state: 'detached' });
-                await this.page.waitForTimeout(1000);
-                row = this.page.locator('tr.ant-table-row').filter({ hasText: className }).nth(0);
+        const rowSelector = () =>
+            this.classTable.locator('tr.ant-table-row').filter({ hasText: className }).first();
+
+        const scanPages = async () => {
+            let row = rowSelector();
+            if ((await row.count()) > 0) {
+                return row;
             }
+
+            const pageLinks = this.page.locator('.ant-pagination-item a');
+            const pageCount = await pageLinks.count();
+            const order =
+                pageCount > 1
+                    ? [...Array(pageCount).keys()].reverse()
+                    : [...Array(pageCount).keys()];
+
+            for (const index of order) {
+                await pageLinks.nth(index).click();
+                await this.page.locator('.ant-spin-spinning').waitFor({ state: 'detached' }).catch(() => {});
+                row = rowSelector();
+                if ((await row.count()) > 0) {
+                    return row;
+                }
+            }
+            return rowSelector();
+        };
+
+        let row = await scanPages();
+        if ((await row.count()) > 0) {
+            return row;
         }
 
-        if (await row.count() === 0) {
-            await this.page.reload();
-            await this.page.waitForLoadState('networkidle');
-            row = this.page.locator('tr.ant-table-row').filter({ hasText: className }).nth(0);
-        }
-        
+        await this.page.reload();
+        await this.page.waitForLoadState('networkidle');
+        row = await scanPages();
+        await expect(row).toBeVisible({ timeout: 15000 });
         return row;
     }
 
@@ -103,64 +143,96 @@ export class ClassPage {
         await this.page.waitForURL(/\/admin\/classes\/\w+/);
     }
 
+    /**
+     * Enroll a student via the "Add Student" modal.
+     * SUT loads only the first 100 students (ClassDetail.loadAllStudents). When studentName is
+     * omitted, picks the first dropdown option. When provided, filters client-side by name/code.
+     */
     async enrollStudent(studentName?: string): Promise<string> {
         await this.studentTab.click();
-        await this.addStudentBtn.click();
-        
-        const modal = this.page.locator('.ant-modal-content').nth(0);
-        await modal.waitFor({ state: 'visible' });
-        
-        // Open the select
-        const select = modal.locator('.ant-select').nth(0);
-        await select.click();
-        
-        // Wait for the dropdown to be visible
-        const dropdown = this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').nth(0);
-        await dropdown.waitFor({ state: 'visible' });
 
+        // ClassDetail.loadAllStudents() is fired on click without await — wait for the list API first
+        const studentsLoaded = this.page.waitForResponse(
+            (res) =>
+                res.url().includes('/api/student') &&
+                res.request().method() === 'GET' &&
+                res.ok(),
+            { timeout: 20000 }
+        );
+
+        await this.addStudentBtn.click();
+        const listResponse = await studentsLoaded;
+        const listBody = await listResponse.json();
+        const items = (listBody.items ?? []) as { full_name: string }[];
+        expect(items.length).toBeGreaterThan(0);
+
+        const modal = this.page.getByRole('dialog', { name: /Add Student to Class/i });
+        await expect(modal).toBeVisible();
+
+        const combobox = modal.getByRole('combobox');
+        await combobox.click();
+
+        // Use the latest open dropdown (modal select). .nth(0) can match a hidden stale panel from other selects.
+        const dropdown = this.page
+            .locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
+            .last();
+        await expect(dropdown).toBeVisible({ timeout: 15000 });
+
+        const options = dropdown.locator('.ant-select-item-option-content');
+        await expect(options.first()).toBeVisible({ timeout: 15000 });
+
+        let target = options.first();
         if (studentName) {
-            const selectInput = select.locator('input').nth(0);
-            await selectInput.fill(studentName);
-            await this.page.waitForTimeout(500);
+            await combobox.fill(studentName);
+            const namePattern = new RegExp(escapeRegExp(studentName), 'i');
+            const filtered = options.filter({ hasText: namePattern });
+            if ((await filtered.count()) === 0) {
+                throw new Error(
+                    `Student "${studentName}" is not in the Add Student dropdown. ` +
+                        'SUT only loads the first 100 students; provision via API or omit studentName.'
+                );
+            }
+            target = filtered.first();
         }
-        
-        // Find the first available option
-        const firstOption = dropdown.locator('.ant-select-item-option-content').nth(0);
-        await expect(firstOption).toBeVisible({ timeout: 10000 });
-        
-        const actualName = (await firstOption.innerText()).trim();
-        await firstOption.click();
-        
-        await modal.getByRole('button', { name: 'OK' }).nth(0).click();
-        await modal.waitFor({ state: 'hidden' });
-        
-        return actualName;
+
+        const optionLabel = (await target.innerText()).trim();
+        await target.evaluate((el) => (el as HTMLElement).click());
+
+        await modal.getByRole('button', { name: 'OK' }).click();
+        await expect(modal).toBeHidden({ timeout: 10000 });
+
+        return optionLabel.replace(/\s*\([^)]*\)\s*$/, '').trim();
     }
 
     async markAttendance(studentName: string, status: 'Present' | 'Absent' | 'Late' | 'Excused') {
         await this.attendanceTab.click();
+
+        const attendancePanel = this.page.locator('.ant-tabs-tabpane-active');
+        await expect(attendancePanel).toBeVisible();
+
+        const row = attendancePanel
+            .locator('tr.ant-table-row')
+            .filter({ hasText: studentName })
+            .first();
+        await expect(row).toBeVisible({ timeout: 15000 });
         
-        // Robust wait for the specific student to appear in the table (handles lazy loading)
-        const row = this.page.locator('tr.ant-table-row').filter({ hasText: studentName }).nth(0);
-        await row.waitFor({ state: 'visible', timeout: 15000 });
-        
-        // Handle "Take Attendance" button
-        try {
-            // Check if we are already in edit mode (Save Changes button is visible)
-            if (!(await this.saveAttendanceBtn.isVisible())) {
-                await this.takeAttendanceBtn.waitFor({ state: 'visible', timeout: 5000 });
-                await this.takeAttendanceBtn.click();
-            }
-        } catch (e) {
-            // Fallback or already in edit mode
+        const saveBtn = attendancePanel.getByRole('button', { name: 'Save Changes' });
+        const takeAttendanceBtn = attendancePanel.getByRole('button', { name: 'Take Attendance' });
+
+        if (!(await saveBtn.isVisible())) {
+            await takeAttendanceBtn.click();
+            await expect(saveBtn).toBeVisible({ timeout: 10000 });
         }
         
         await row.scrollIntoViewIfNeeded();
         
-        const radioBtn = row.locator('.ant-radio-button-wrapper').filter({ hasText: new RegExp(`^${status}$`, 'i') }).nth(0);
+        const radioBtn = row
+            .locator('.ant-radio-button-wrapper')
+            .filter({ hasText: new RegExp(`^${status}$`, 'i') })
+            .first();
         await radioBtn.click();
-        
-        await this.saveAttendanceBtn.click();
+
+        await attendancePanel.getByRole('button', { name: 'Save Changes' }).click();
         await expect(this.page.locator('.ant-message-success').nth(0)).toBeVisible();
     }
 
@@ -179,7 +251,7 @@ export class ClassPage {
                 .locator('.ant-select-item-option-content')
                 .filter({ hasText: course })
                 .nth(0);
-            await courseOption.click();
+            await courseOption.evaluate(el => (el as HTMLElement).click());
         }
 
         await this.submitBtn.click();
@@ -192,13 +264,53 @@ export class ClassPage {
     async deleteClass(className: string) {
         const row = await this.findClassRow(className);
         await row.scrollIntoViewIfNeeded();
-        await row.locator('button:has(.anticon-delete)').nth(0).click();
-        
-        const popconfirmBtn = this.page.locator('.ant-popover:not(.ant-popover-hidden) button.ant-btn-primary').nth(0);
-        await popconfirmBtn.waitFor({ state: 'visible' });
-        await popconfirmBtn.click();
-        
-        await expect(this.page.locator('.ant-message-success').nth(0)).toBeVisible();
-        await this.page.locator('.ant-message-success').nth(0).waitFor({ state: 'hidden' });
+
+        const deleteDone = this.page.waitForResponse(
+            (res) => res.url().includes('/api/class/') && res.request().method() === 'DELETE',
+            { timeout: 20000 }
+        );
+
+        await row.locator('button:has(.anticon-delete)').first().click();
+
+        const popconfirm = this.page.locator('.ant-popconfirm, .ant-popover').filter({ hasText: /Sure to delete/i });
+        await expect(popconfirm).toBeVisible({ timeout: 5000 });
+        await popconfirm.getByRole('button', { name: /^OK$/i }).click();
+
+        const response = await deleteDone;
+        expect(response.ok()).toBeTruthy();
+        await expect(this.page.locator('tr.ant-table-row').filter({ hasText: className })).toHaveCount(0, {
+            timeout: 10000,
+        });
+    }
+
+    /** Delete using the admin JWT from localStorage (clears enrollments first). */
+    async deleteClassById(classId: string) {
+        const token = await this.page.evaluate(() => localStorage.getItem('access_token'));
+        expect(token).toBeTruthy();
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const today = new Date().toISOString().slice(0, 10);
+        await this.page.request.post(`/api/class/${classId}/attendance`, {
+            headers,
+            data: { date: today, records: [] },
+        });
+
+        const listRes = await this.page.request.get(`/api/class/${classId}/students?per_page=100`, {
+            headers,
+        });
+        if (listRes.ok()) {
+            const body = await listRes.json();
+            const students = (body.items ?? []) as { id: string }[];
+            for (const student of students) {
+                await this.page.request.delete(`/api/class/${classId}/students/${student.id}`, {
+                    headers,
+                });
+            }
+        }
+
+        const response = await this.page.request.delete(`/api/class/${classId}`, { headers });
+        if (!response.ok()) {
+            throw new Error(`Delete class failed: ${response.status()} ${await response.text()}`);
+        }
     }
 }

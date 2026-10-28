@@ -1,0 +1,66 @@
+name: Smoke Tests
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  EDUMASTER_ROOT: ${{ github.workspace }}/edumaster
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout QA framework
+        uses: actions/checkout@v4
+
+      - name: Checkout Edumaster SUT
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.EDUMASTER_REPOSITORY }}
+          path: edumaster
+          token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Verify SUT checkout
+        run: |
+          if [ ! -d "${EDUMASTER_ROOT}/backend" ]; then
+            echo "::error::Edumaster SUT not found. Set repository variable EDUMASTER_REPOSITORY (e.g. org/edumaster) or place edumaster at ./edumaster."
+            exit 1
+          fi
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman podman-compose
+
+      - name: Start test stack
+        run: |
+          podman-compose up -d --build
+          echo "Waiting for postgres..."
+          for i in $(seq 1 30); do
+            podman exec edumaster-postgres-test pg_isready -U test -d edumaster_test && break
+            sleep 3
+          done
+          podman exec edumaster-backend-test flask db upgrade || true
+          sleep 10
+
+      - name: Seed QA portal (incremental)
+        run: podman exec qa-backend python3 /app/seed_incremental.py
+
+      - name: Run smoke tests
+        run: podman exec qa-backend bash /app/scripts/run-tests.sh smoke
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-reports
+          path: |
+            qa_core/reports/
+          if-no-files-found: ignore

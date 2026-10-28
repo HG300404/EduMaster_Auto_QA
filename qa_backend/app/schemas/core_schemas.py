@@ -21,10 +21,16 @@ class TestCaseBase(BaseModel):
 class TestCaseCreate(TestCaseBase):
     suite_id: int
 
+class RecentRunSummary(BaseModel):
+    test_run_id: int
+    status: str  # passed | failed | running | pending
+    run_at: datetime
+
 class TestCaseResponse(TestCaseBase):
     id: int
     suite_id: int
     created_at: datetime
+    recent_result: Optional[RecentRunSummary] = None
     model_config = ConfigDict(from_attributes=True)
 
 class TestSuiteResponse(BaseModel):
@@ -53,6 +59,8 @@ class TestResultResponse(BaseModel):
     error_message: Optional[str] = None
     execution_data: Optional[str] = None
     log_file_path: Optional[str] = None
+    screenshot_path: Optional[str] = None
+    steps_data: Optional[str] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +97,9 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+class UserUpdateRole(BaseModel):
+    role: str
 
 class TokenResponse(BaseModel):
     access_token: str

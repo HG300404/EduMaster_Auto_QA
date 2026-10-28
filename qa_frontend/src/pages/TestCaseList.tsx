@@ -4,9 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Play, 
   Search, 
-  Plus, 
-  FileCode, 
-  X
+  FileCode
 } from 'lucide-react';
 import { 
   Button, 
@@ -15,7 +13,32 @@ import {
   Table
 } from '@heroui/react';
 import { api } from '../api';
+import type { RecentRunSummary } from '../api';
 import '../styles/TestCaseList.css';
+
+function formatRecentRunDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function recentResultLabel(status: RecentRunSummary['status']): string {
+  switch (status) {
+    case 'passed':
+      return 'Passed';
+    case 'failed':
+      return 'Failed';
+    case 'running':
+      return 'Running';
+    default:
+      return 'Pending';
+  }
+}
 
 export default function TestCaseList() {
   const navigate = useNavigate();
@@ -25,14 +48,6 @@ export default function TestCaseList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusTab, setStatusTab] = useState<'all' | 'active' | 'draft'>('all');
-
-  // Modal open state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Form states
-  const [newTcTitle, setNewTcTitle] = useState('');
-  const [newTcFilePath, setNewTcFilePath] = useState('tests/test_auth.py');
-  const [newTcSuite, setNewTcSuite] = useState('1');
 
   // Debounce logic as requested by FE_RULES.md
   useEffect(() => {
@@ -56,21 +71,6 @@ export default function TestCaseList() {
     placeholderData: [],
   });
 
-  // Create Test Case Mutation
-  const createTestCaseMutation = useMutation({
-    mutationFn: api.createTestCase,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['testcases'] });
-      queryClient.invalidateQueries({ queryKey: ['testsuites'] });
-      setNewTcTitle('');
-      setIsModalOpen(false);
-    },
-    onError: (err) => {
-      console.error(err);
-      alert('Failed to register test case');
-    }
-  });
-
   // Trigger Run Test Mutation
   const triggerTestMutation = useMutation({
     mutationFn: api.triggerTestRun,
@@ -85,16 +85,6 @@ export default function TestCaseList() {
       alert('Failed to execute test run');
     }
   });
-
-  const handleCreateTestCase = () => {
-    if (!newTcTitle.trim()) return;
-    createTestCaseMutation.mutate({
-      suite_id: parseInt(newTcSuite),
-      title: newTcTitle,
-      status: 'active',
-      file_path: newTcFilePath,
-    });
-  };
 
   const handleRunTestCase = (id: number) => {
     triggerTestMutation.mutate(id);
@@ -126,15 +116,6 @@ export default function TestCaseList() {
           <h2 className="text-2xl font-bold text-[#1F1F1F]">Automated Test Cases</h2>
           <span className="text-xs text-[#595959] font-semibold">Manage, inspect, and trigger your Pytest scenarios</span>
         </div>
-        
-        <Button 
-          className="bg-[#1677FF] text-white font-bold text-xs h-9 px-4 rounded-md flex items-center justify-center gap-1.5"
-          onClick={() => setIsModalOpen(true)}
-          aria-label="Add Test Case"
-        >
-          <Plus size={16} />
-          <span>Add Test Case</span>
-        </Button>
       </div>
 
       {/* QUICK STATUS METRICS */}
@@ -252,6 +233,7 @@ export default function TestCaseList() {
                           <Table.Column className="tcl-table-header">Title</Table.Column>
                           <Table.Column className="tcl-table-header">Execution Pathway</Table.Column>
                           <Table.Column className="tcl-table-header">Status</Table.Column>
+                          <Table.Column className="tcl-table-header">Recent Result</Table.Column>
                           <Table.Column className="tcl-table-header text-center">Trigger Action</Table.Column>
                         </Table.Header>
                         <Table.Body items={suite.test_cases}>
@@ -269,6 +251,27 @@ export default function TestCaseList() {
                                 <span className={`px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase rounded-full ${tc.status === 'active' ? 'bg-green-50 text-[#52C41A]' : 'bg-amber-50 text-[#FAAD14]'}`}>
                                   {tc.status}
                                 </span>
+                              </Table.Cell>
+                              <Table.Cell className="py-4 px-4">
+                                {tc.recent_result ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/testrun/${tc.recent_result!.test_run_id}`)}
+                                    className="tcl-recent-result group text-left"
+                                    title="Open last test run"
+                                  >
+                                    <span
+                                      className={`tcl-recent-result-badge tcl-recent-result-${tc.recent_result.status}`}
+                                    >
+                                      {recentResultLabel(tc.recent_result.status)}
+                                    </span>
+                                    <span className="tcl-recent-result-date">
+                                      {formatRecentRunDate(tc.recent_result.run_at)}
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <span className="text-xs font-semibold text-[#BFBFBF]">Never run</span>
+                                )}
                               </Table.Cell>
                               <Table.Cell className="py-4 px-4 text-center">
                                 <Button 
@@ -296,80 +299,6 @@ export default function TestCaseList() {
           ))
         )}
       </div>
-
-      {/* CREATE NEW TEST CASE DIALOG OVERLAY */}
-      {isModalOpen && (
-        <div className="tcl-modal-overlay">
-          <div className="tcl-modal-container">
-            {/* Close trigger */}
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-[#8C8C8C] hover:text-[#1F1F1F] transition-colors"
-            >
-              <X size={18} />
-            </button>
-
-            <div>
-              <h3 className="text-[#1F1F1F] font-bold text-lg">Register New Test Case</h3>
-              <span className="text-xs text-[#8C8C8C] font-semibold">Deploy a new Pytest script to target suite routes</span>
-            </div>
-
-            <div className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#8C8C8C]">TEST CASE TITLE</label>
-                <input
-                  placeholder="e.g. Verify Payment Integration"
-                  value={newTcTitle}
-                  onChange={(e) => setNewTcTitle(e.target.value)}
-                  className="tcl-input"
-                />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#8C8C8C]">PYTEST FILE PATH</label>
-                <input
-                  placeholder="e.g. api/test_payment.py"
-                  value={newTcFilePath}
-                  onChange={(e) => setNewTcFilePath(e.target.value)}
-                  className="tcl-input"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-[#8C8C8C]">PARENT TEST SUITE</label>
-                <select
-                  value={newTcSuite}
-                  onChange={(e) => setNewTcSuite(e.target.value)}
-                  className="tcl-select"
-                >
-                  {(testsuites || []).map(suite => (
-                    <option key={suite.id} value={suite.id}>{suite.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-[#F0F0F0]">
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="font-bold text-xs h-9 px-4 bg-zinc-100 text-zinc-600 rounded-md transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                className="bg-[#1677FF] text-white font-bold text-xs h-9 px-4 rounded-md flex items-center justify-center gap-1.5 disabled:opacity-50"
-                onClick={handleCreateTestCase}
-                disabled={createTestCaseMutation.isPending}
-              >
-                {createTestCaseMutation.isPending && (
-                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                )}
-                <span>Register Test</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

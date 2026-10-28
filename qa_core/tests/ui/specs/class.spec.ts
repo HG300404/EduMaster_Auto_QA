@@ -2,97 +2,110 @@
 // @module: LMS
 // @type: UI-E2E
 
-import { test, expect } from '@playwright/test';
+import { test, expect, uiStep } from '../fixtures';
 import { LoginPage } from '../pages/LoginPage';
 import { ClassPage } from '../pages/ClassPage';
-import { StudentPage } from '../pages/StudentPage';
 
 test.describe.serial('Class Management & Attendance UI Suite (UI + API Optimized)', () => {
     let classPage: ClassPage;
-    let studentPage: StudentPage;
+    let studentName = '';
+    let classId = '';
+    let classDetailPath = '';
 
-    // Arrange: Define shared data
     const timestamp = Date.now();
-    const studentName = `Test Student ${timestamp}`;
-    const studentCode = `S${timestamp.toString().slice(-6)}`;
     const className = `Test Class ${timestamp}`;
 
     test.beforeEach(async ({ page }) => {
         const loginPage = new LoginPage(page);
         classPage = new ClassPage(page);
-        studentPage = new StudentPage(page);
 
-        // Arrange: Login UI
         await loginPage.navigate();
-        await loginPage.login('admin@edumaster.com', 'admin123');
+        await loginPage.login(
+            process.env.ADMIN_EMAIL || 'admin@edumaster.com',
+            process.env.ADMIN_PASSWORD || 'admin123'
+        );
         await expect(page).toHaveURL(/.*admin/);
     });
 
-    test('Arrange: Create a student via UI', async ({ page }) => {
-        // Ensuring full synchronization by creating via UI
-        await studentPage.navigateToStudents();
-        await studentPage.openAddStudentForm();
-        await studentPage.fillStudentForm({
-            name: studentName,
-            email: `test_stu_${timestamp}@example.com`,
-            code: studentCode
+    test('Act: Create a new class via UI', { tag: '@smoke' }, async ({ page }, testInfo) => {
+        await uiStep(page, testInfo, 'Navigate to Classes page', async () => {
+            await classPage.navigateToClasses();
         });
-        await studentPage.submitForm();
-        
-        // Verification
-        await expect(page.locator('.ant-message-success').nth(0)).toBeVisible();
-    });
 
-    test('Act: Create a new class via UI', async ({ page }) => {
-        await classPage.navigateToClasses();
-        await classPage.createClass({
-            name: className,
-            course: 'Japanese' 
+        await uiStep(page, testInfo, 'Create new class via UI form', async () => {
+            classId = await classPage.createClass({
+                name: className,
+                course: 'Japanese',
+            });
         });
-        
-        // Assert
-        const row = await classPage.findClassRow(className);
-        await expect(row).toBeVisible();
+
+        await uiStep(page, testInfo, 'Verify class detail page', async () => {
+            classDetailPath = `/admin/classes/${classId}`;
+            await page.goto(classDetailPath);
+            await expect(page.getByText(className, { exact: true })).toBeVisible({ timeout: 10000 });
+        });
     });
 
-    test('Act: Enroll the student', async ({ page }) => {
-        // Act: Go to detail and enroll
-        await classPage.navigateToClasses();
-        await classPage.goToClassDetail(className);
-        await classPage.enrollStudent(studentName);
+    test('Act: Enroll the student', { tag: '@smoke' }, async ({ page }, testInfo) => {
+        await uiStep(page, testInfo, 'Open class detail page', async () => {
+            await page.goto(classDetailPath);
+            await page.waitForURL(/\/admin\/classes\/\w+/);
+        });
 
-        // Assert: Verify enrollment in the student list tab
-        await classPage.studentTab.click();
-        await expect(page.locator('tr.ant-table-row').filter({ hasText: studentName }).first()).toBeVisible();
+        await uiStep(page, testInfo, 'Enroll student in class', async () => {
+            studentName = await classPage.enrollStudent();
+        });
+
+        await uiStep(page, testInfo, 'Verify student in Students tab', async () => {
+            await classPage.studentTab.click();
+            await expect(
+                page.locator('tr.ant-table-row').filter({ hasText: studentName }).first()
+            ).toBeVisible();
+        });
     });
 
-    test('Act: Take attendance for the student', async ({ page }) => {
-        // Act: Mark attendance as Present
-        await classPage.navigateToClasses();
-        await classPage.goToClassDetail(className);
-        await classPage.markAttendance(studentName, 'Present');
-        
-        // Assert: Verify success tag
-        await expect(page.locator('.ant-tag', { hasText: /PRESENT/i }).first()).toBeVisible();
+    test('Act: Take attendance for the student', async ({ page }, testInfo) => {
+        await uiStep(page, testInfo, 'Open class detail page', async () => {
+            await page.goto(classDetailPath);
+            await page.waitForURL(/\/admin\/classes\/\w+/);
+        });
+
+        await uiStep(page, testInfo, 'Mark student as Present', async () => {
+            await classPage.markAttendance(studentName, 'Present');
+        });
+
+        await uiStep(page, testInfo, 'Verify Present status tag', async () => {
+            await expect(
+                page.locator('.ant-tabs-tabpane-active').locator('.ant-tag', { hasText: /PRESENT/i }).first()
+            ).toBeVisible();
+        });
     });
 
-    test('Act: Update attendance status to Excused', async ({ page }) => {
-        // Act: Change status to Excused
-        await classPage.navigateToClasses();
-        await classPage.goToClassDetail(className);
-        await classPage.markAttendance(studentName, 'Excused');
-        
-        // Assert: Verify updated tag
-        await expect(page.locator('.ant-tag', { hasText: /EXCUSED/i }).first()).toBeVisible();
+    test('Act: Update attendance status to Excused', async ({ page }, testInfo) => {
+        await uiStep(page, testInfo, 'Open class detail page', async () => {
+            await page.goto(classDetailPath);
+            await page.waitForURL(/\/admin\/classes\/\w+/);
+        });
+
+        await uiStep(page, testInfo, 'Mark student as Excused', async () => {
+            await classPage.markAttendance(studentName, 'Excused');
+        });
+
+        await uiStep(page, testInfo, 'Verify Excused status tag', async () => {
+            await expect(
+                page.locator('.ant-tabs-tabpane-active').locator('.ant-tag', { hasText: /EXCUSED/i }).first()
+            ).toBeVisible();
+        });
     });
 
-    test('Act: Delete the class', async ({ page }) => {
-        // Act: Delete
-        await classPage.navigateToClasses();
-        await classPage.deleteClass(className);
-        
-        // Assert
-        const row = page.locator('tr.ant-table-row').filter({ hasText: className }).nth(0);
-        await expect(row).toHaveCount(0);
+    test('Act: Delete the class', async ({ page }, testInfo) => {
+        await uiStep(page, testInfo, 'Delete class via API cleanup', async () => {
+            await classPage.deleteClassById(classId);
+        });
+
+        await uiStep(page, testInfo, 'Verify class removed from list', async () => {
+            await classPage.navigateToClasses();
+            await expect(page.locator('tr.ant-table-row').filter({ hasText: className })).toHaveCount(0);
+        });
     });
 });

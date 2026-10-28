@@ -1,48 +1,68 @@
 # EDUMASTER Auto QA Framework
 
-Hệ thống kiểm thử tự động (Auto QA) toàn diện cho dự án EDUMASTER, sử dụng **Podman**, **Playwright**, và **Pytest**. Framework này được thiết kế theo mô hình Container-first để đảm bảo tính độc lập và nhất quán của môi trường test.
+Hệ thống kiểm thử tự động (Auto QA) cho Edumaster — **Podman**, **Playwright** (UI), **Pytest** (API), **QA Portal** (TMS).
 
-## 📂 Cấu trúc dự án (Project Structure)
+## Project structure
 
-- `scripts/`: Bộ công cụ PowerShell (01-05) điều khiển toàn bộ lifecycle của môi trường test.
-- `tests/`: 
-    - `api/`: Kiểm thử API bằng Python (Pytest + Pydantic Schema Validation).
-    - `ui/`: Kiểm thử UI bằng TypeScript (Playwright + POM).
-- `Docs/`: Tài liệu chi tiết về SRS, kịch bản kiểm thử (Test Cases) và hướng dẫn vận hành.
-- `reports/`: Lưu trữ báo cáo kết quả kiểm thử (XML, HTML).
+```
+EduMaster_Auto_QA/
+├── qa_core/tests/          # Pytest + Playwright specs
+├── qa_backend/             # TMS API, seed_incremental.py
+├── qa_frontend/            # QA portal UI
+├── scripts/                # Lifecycle + smoke/regression runners
+├── podman-compose.yml      # SUT + TMS stack
+└── Docs/tests/             # Run guides
+```
 
-## 🛠 Yêu cầu hệ thống (Prerequisites)
+## Quick start (Windows)
 
-- **OS**: Windows 10/11.
-- **Hạ tầng**: [Podman Desktop](https://podman-desktop.io/) hoặc Podman CLI.
-- **PowerShell**: Version 5.1 hoặc mới hơn.
+```powershell
+.\scripts\01_start_env.ps1
+.\scripts\02_init_db.ps1
+.\scripts\run-smoke.ps1
+```
 
-## 🚀 Quy trình vận hành (TDD Workflow)
+## Test suites (Phase 4)
 
-Hệ thống được tự động hóa qua 5 bước chính:
+| Command | Scope |
+|---------|--------|
+| `.\scripts\run-smoke.ps1` | Business modules — API `@smoke` + UI `@smoke` (~28 cases) |
+| `.\scripts\run-regression.ps1` | Full API + all UI specs (core + business) |
 
-1.  **Khởi động môi trường**: `.\scripts\01_start_env.ps1` (Build & Start containers).
-2.  **Khởi tạo dữ liệu**: `.\scripts\02_init_db.ps1` (Migration & Seed dữ liệu sạch).
-3.  **Chạy Test API**: `.\scripts\03_run_api.ps1` (Thực thi toàn bộ bộ test Backend).
-4.  **Chạy Test UI**: `.\scripts\04_run_ui.ps1` (Thực thi bộ test Frontend qua Playwright).
-5.  **Dọn dẹp**: `.\scripts\05_teardown.ps1` (Hủy bỏ container để giải phóng tài nguyên).
+Chi tiết: [Docs/tests/automation_readme.md](Docs/tests/automation_readme.md)
 
-## 🧪 Trạng thái Kiểm thử hiện tại (Current Status)
+## Coverage status
 
-Hệ thống đã hoàn thiện khung và bộ test cho các module cốt lõi:
+### Business modules (Phase 1–3) — smoke ready
 
-- **API Coverage (Pass 100%)**:
-    - ✅ **Authentication**: Đăng nhập, xác thực Token.
-    - ✅ **Student Management**: CRUD học sinh, quản lý hồ sơ, phân trang.
-    - ✅ **LMS Management (Classes/Courses)**: Tạo khóa học, lớp học, đăng ký học sinh và điểm danh.
-- **UI Coverage (Đang phát triển)**:
-    - ✅ **Login flow**: Thành công và Validation form.
-    - 🚧 **LMS Modules**: Đang trong quá trình chuyển đổi kịch bản sang automation code.
+| Phase | API | UI |
+|-------|-----|-----|
+| CRM + Finance | ✅ | ✅ |
+| File Upload + Reporting | ✅ | ✅ |
+| Study Abroad / XKLĐ | ✅ | ✅ (1 workflow smoke) |
 
-## 📊 Báo cáo (Reporting)
+### Core modules (regression)
 
-- **API**: Kết quả hiển thị trực tiếp trên Console và được lưu vào `reports/`.
-- **UI**: Báo cáo HTML trực quan với ảnh chụp màn hình/video lỗi tại `playwright-report/index.html`.
+| Module | API | UI |
+|--------|-----|-----|
+| Auth / Login | ✅ | ✅ |
+| Students / Classes / LMS | ✅ | ✅ |
+| Attendance | — | ✅ |
+
+## Seed rule
+
+- **Use:** `podman exec qa-backend python3 /app/seed_incremental.py` (idempotent upsert)
+- **Avoid:** `seed.py` on existing environments (TRUNCATE wipes run history)
+
+## CI
+
+GitHub Actions workflow `.github/workflows/ci-smoke.yml` runs smoke on PR when `EDUMASTER_REPOSITORY` is configured.
+
+## Environment
+
+- SUT path: `EDUMASTER_ROOT` (default `../edumaster_podman/edumaster`)
+- QA portal: http://localhost:3001
+- QA API: http://localhost:8001
 
 ---
-© 2026 EDUMASTER - Advanced Educational CRM Automation
+© 2026 EDUMASTER — Automation Framework Phase 4

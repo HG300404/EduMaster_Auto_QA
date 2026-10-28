@@ -8,7 +8,7 @@ import jwt
 from datetime import datetime, timedelta
 from app.db.session import get_db
 from app.models.core_models import User, AuditLog
-from app.schemas.core_schemas import APIResponse, UserRegister, UserLogin, TokenResponse, AuditLogResponse
+from app.schemas.core_schemas import APIResponse, UserRegister, UserLogin, TokenResponse, AuditLogResponse, UserResponse, UserUpdateRole
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -114,12 +114,101 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
         message="Login successful"
     )
 
+async def verify_admin(current_user: User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Admin role required"
+        )
+    return current_user
+
 @router.get("/audit", response_model=APIResponse[List[AuditLogResponse]])
-async def get_audit_logs(limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db)):
+async def get_audit_logs(
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(verify_admin),
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).offset(offset))
     logs = result.scalars().all()
     return APIResponse(
         success=True,
         data=logs,
         message="Audit logs retrieved successfully"
+    )
+
+@router.get("/users", response_model=APIResponse[List[UserResponse]])
+async def get_users(
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(verify_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(User).order_by(User.id.desc()).limit(limit).offset(offset))
+    users = result.scalars().all()
+    return APIResponse(
+        success=True,
+        data=users,
+        message="Users retrieved successfully"
+    )
+
+@router.put("/users/{user_id}/role", response_model=APIResponse[UserResponse])
+async def update_user_role(
+    user_id: int,
+    payload: UserUpdateRole,
+    current_user: User = Depends(verify_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    old_role = user.role
+    user.role = payload.role
+    
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Update User Role",
+        details=f"Admin {current_user.email} updated role of user {user.email} from {old_role} to {payload.role}."
+    )
+    db.add(audit)
+    await db.commit()
+    await db.refresh(user)
+    
+    return APIResponse(
+        success=True,
+        data=user,
+        message=f"User role updated successfully to {payload.role}"
+    )
+
+@router.delete("/users/{user_id}", response_model=APIResponse[dict])
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(verify_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
+        
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user_email = user.email
+    await db.delete(user)
+    
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="Delete User",
+        details=f"Admin {current_user.email} deleted user account {user_email} (ID: {user_id})."
+    )
+    db.add(audit)
+    await db.commit()
+    
+    return APIResponse(
+        success=True,
+        data={"user_id": user_id},
+        message="User deleted successfully"
     )

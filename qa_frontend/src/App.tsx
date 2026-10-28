@@ -6,6 +6,8 @@ import TestRunDetail from './pages/TestRunDetail';
 import ExecutionHistory from './pages/ExecutionHistory';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AdminUsers from './pages/AdminUsers';
+import AdminAuditLogs from './pages/AdminAuditLogs';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
@@ -19,6 +21,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('user');
     localStorage.removeItem('login_time');
     return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const userStr = localStorage.getItem('user');
+  let isAdmin = false;
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      isAdmin = user.role === 'admin';
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -43,6 +64,8 @@ export default function App() {
                   <Route path="/testcases" element={<TestCaseList />} />
                   <Route path="/history" element={<ExecutionHistory />} />
                   <Route path="/testrun/:id" element={<TestRunDetail />} />
+                  <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+                  <Route path="/admin/audit" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
                   
                   {/* Fallback support info */}
                   <Route path="/docs" element={

@@ -3,7 +3,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from datetime import datetime, timezone
-from app.models.core_models import TestRun, TestCase, TestRunStatus, TestResult, TestSuite
+from app.models.core_models import TestRun, TestCase, TestRunStatus, TestResult, TestSuite, AuditLog, User
 
 async def create_test_run(db: AsyncSession, testcase_id: int, user_id: int = None):
     # Get test case
@@ -19,6 +19,24 @@ async def create_test_run(db: AsyncSession, testcase_id: int, user_id: int = Non
         started_at=datetime.now(timezone.utc)
     )
     db.add(new_run)
+    await db.flush()  # Generate the ID for new_run
+    
+    # Get user email for audit logging
+    user_email = "Unknown"
+    if user_id:
+        user_res = await db.execute(select(User).where(User.id == user_id))
+        user = user_res.scalars().first()
+        if user:
+            user_email = user.email
+            
+    # Create Audit Log record
+    audit = AuditLog(
+        user_id=user_id,
+        action="Run Test",
+        details=f"User {user_email} triggered test run (ID: {new_run.id}) for TestCase: {testcase.title} (File: {testcase.file_path}, Function: {testcase.function_name or 'N/A'})."
+    )
+    db.add(audit)
+    
     await db.commit()
     await db.refresh(new_run)
     
@@ -112,9 +130,14 @@ async def get_by_id(db: AsyncSession, run_id: int):
     if not test_run:
         raise HTTPException(status_code=404, detail="TestRun not found")
         
-    # Dynamically read local log file lines if available
+    # Read log file — ưu tiên path đã lưu trong DB, fallback về env var
     logs = []
-    log_file_path = f"/app/tests/logs/run_{run_id}.log"
+    log_dir = os.getenv("LOG_DIR", "/app/qa_core/tests/logs")
+    log_file_path = (
+        test_run.test_results[0].log_file_path
+        if test_run.test_results and test_run.test_results[0].log_file_path
+        else f"{log_dir}/run_{run_id}.log"
+    )
     if os.path.exists(log_file_path):
         try:
             with open(log_file_path, "r", encoding="utf-8") as f:
@@ -124,3 +147,4 @@ async def get_by_id(db: AsyncSession, run_id: int):
     test_run.logs = logs
     
     return test_run
+

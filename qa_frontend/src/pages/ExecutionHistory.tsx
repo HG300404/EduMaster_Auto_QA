@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -8,10 +8,7 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  TrendingUp,
-  Clock,
-  Activity,
-  Play
+  TrendingUp
 } from 'lucide-react';
 import {
   Card,
@@ -27,7 +24,6 @@ import '../styles/ExecutionHistory.css';
 
 export default function ExecutionHistory() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   // Search, filter, pagination states
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,20 +48,6 @@ export default function ExecutionHistory() {
     refetchOnMount: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
-  });
-
-  // Trigger testcase 1 to start a new execution
-  const triggerTestMutation = useMutation({
-    mutationFn: () => api.triggerTestRun(1), // trigger default seed test case
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['testruns'] });
-      queryClient.invalidateQueries({ queryKey: ['testruns_history'] });
-      navigate(`/testrun/${data.test_run_id}`);
-    },
-    onError: (err) => {
-      console.error(err);
-      alert('Failed to trigger execution');
-    }
   });
 
   // Map backend run items to table representation
@@ -110,7 +92,7 @@ export default function ExecutionHistory() {
 
     const active = runs.filter(r => r.status === 'Running').length;
 
-    const segments = runs.slice(0, 7).map(r => {
+    const segments: string[] = runs.slice(0, 7).map(r => {
       if (r.status === 'Passed') return '#52C41A';
       if (r.status === 'Failed') return '#FF4D4F';
       if (r.status === 'Running') return '#1677FF';
@@ -133,19 +115,6 @@ export default function ExecutionHistory() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            className="eh-newrun-btn"
-            onClick={() => triggerTestMutation.mutate()}
-            disabled={triggerTestMutation.isPending}
-          >
-            {triggerTestMutation.isPending ? (
-              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <Play size={14} />
-            )}
-            <span>New Test Run</span>
-          </button>
-
           <button className="eh-export-btn">
             <Download size={14} />
             <span>Export Reports</span>
@@ -217,7 +186,6 @@ export default function ExecutionHistory() {
           <Table 
             aria-label="Execution Runs Table" 
             className="font-sans"
-            onRowAction={(key) => navigate(`/testrun/${String(key).replace('TR-', '')}`)}
           >
             <Table.ScrollContainer>
               <Table.Content>

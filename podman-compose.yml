@@ -23,27 +23,69 @@ services:
     networks:
       - sut-network
 
+  minio:
+    image: minio/minio:latest
+    container_name: edumaster-minio-test
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sut-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: edumaster-redis-test
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - sut-network
+
   backend:
     build:
-      context: E:/DATTTT/edumaster_podman/edumaster/backend
+      context: ${EDUMASTER_ROOT:-../edumaster_podman/edumaster}/backend
       dockerfile: Dockerfile
     container_name: edumaster-backend-test
     command: ["sh", "-c", "tr -d '\r' < ./entrypoint.sh > ./run.sh && chmod +x ./run.sh && ./run.sh"]
     volumes:
-      - ../../edumaster_podman/edumaster/infrastructure/scripts/entrypoint.sh:/app/entrypoint.sh
+      - ${EDUMASTER_ROOT:-../edumaster_podman/edumaster}/infrastructure/scripts/entrypoint.sh:/app/entrypoint.sh
     environment:
       - DATABASE_URL=postgresql://test:test@postgres-test:5432/edumaster_test
       - FLASK_ENV=testing
       - FLASK_APP=app:create_app()
       - FLASK_DEBUG=1
+      - STORAGE_TYPE=minio
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=False
+      - MINIO_BUCKET_NAME=edumaster-files
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
-      - postgres-test
+      postgres-test:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - sut-network
 
   frontend:
     build:
-      context: E:/DATTTT/edumaster_podman/edumaster/frontend
+      context: ${EDUMASTER_ROOT:-../edumaster_podman/edumaster}/frontend
       dockerfile: Dockerfile
     container_name: edumaster-frontend-test
     environment:
@@ -66,6 +108,8 @@ services:
       - POSTGRES_DB=qa_db
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    volumes:
+      - qa_db_data:/var/lib/postgresql/data
     networks:
       - tms-network
 
@@ -73,19 +117,25 @@ services:
     build: ./qa_backend
     container_name: qa-backend
     restart: always
+    command: ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       - qa-db
     env_file:
       - ./qa_backend/.env
     ports:
       - "8001:8000"
+    environment:
+      - BASE_TEST_DIR=/app/qa_core/tests
+      - REPORT_DIR=/app/qa_core/reports
+      - LOG_DIR=/app/qa_core/tests/logs
+      - BASE_URL=http://frontend:80
     volumes:
       - ./qa_backend/app:/app/app
       - ./qa_backend/seed.py:/app/seed.py
-      - ./qa_core/tests:/app/tests
-      - ./qa_core/tests/logs:/app/tests/logs
-      - ./qa_core/reports:/app/reports
-      - ./qa_core/pytest.ini:/app/pytest.ini
+      - ./qa_backend/seed_incremental.py:/app/seed_incremental.py
+      - ./qa_backend/seed_helpers.py:/app/seed_helpers.py
+      - ./qa_core:/app/qa_core
+      - ./scripts:/app/scripts:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -106,3 +156,7 @@ services:
       - /app/node_modules
     networks:
       - tms-network
+
+volumes:
+  qa_db_data:
+  minio_data:

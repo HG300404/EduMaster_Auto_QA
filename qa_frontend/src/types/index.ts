@@ -8,6 +8,13 @@ export interface TestCase {
   status: TestCaseStatus;
   file_path: string;
   created_at: string;
+  recent_result?: RecentRunSummary | null;
+}
+
+export interface RecentRunSummary {
+  test_run_id: number;
+  status: 'passed' | 'failed' | 'running' | 'pending';
+  run_at: string;
 }
 
 export interface TestResult {

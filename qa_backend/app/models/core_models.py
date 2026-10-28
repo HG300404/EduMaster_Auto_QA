@@ -60,6 +60,8 @@ class TestResult(Base):
     error_message = Column(String, nullable=True)
     execution_data = Column(String, nullable=True)  # Generated fake/random test data used at runtime
     log_file_path = Column(String, nullable=True)
+    screenshot_path = Column(String, nullable=True)
+    steps_data = Column(String, nullable=True)  # JSON string of steps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     test_run = relationship("TestRun", back_populates="test_results")

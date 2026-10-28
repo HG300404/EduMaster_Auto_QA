@@ -9,11 +9,12 @@ import {
   XCircle, 
   AlertCircle,
   Terminal,
-  Server,
   Image as ImageIcon,
   Tag,
-  Maximize2,
   Download,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
   Globe,
   ChevronDown,
   ChevronUp
@@ -32,6 +33,14 @@ export default function TestRunDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const [selectedStepIndex, setSelectedStepIndex] = useState(0);
+  const [screenshotZoom, setScreenshotZoom] = useState(100);
+
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
+
+  const SCREENSHOT_ZOOM_MIN = 50;
+  const SCREENSHOT_ZOOM_MAX = 200;
+  const SCREENSHOT_ZOOM_STEP = 25;
 
   // Parse ID
   const runIdNum = id ? parseInt(id) : 1;
@@ -98,8 +107,16 @@ export default function TestRunDetail() {
 
   // Extract captured api logs
   const apiInteractionLogs = useMemo(() => {
+    const stepsData = _testRun?.test_results?.[0]?.steps_data;
+    if (stepsData) {
+      try {
+        return JSON.parse(stepsData);
+      } catch (e) {
+        console.error('Failed to parse steps_data', e);
+      }
+    }
     return executionData?.api_interaction_logs || [];
-  }, [executionData]);
+  }, [_testRun, executionData]);
 
   // Check if it is a UI test
   const isUiTest = useMemo(() => {
@@ -139,20 +156,33 @@ export default function TestRunDetail() {
     return 'Verifies the full OAuth2 authorization code flow, ensuring correct token exchange and session creation for third-party identity providers.';
   }, [_testRun]);
 
+  const parsePlaywrightTitle = (testName: string) => {
+    if (testName.includes(' › ')) {
+      const segments = testName.split(' › ');
+      return segments[segments.length - 1];
+    }
+    const parts = testName.split('::');
+    return parts[parts.length - 1];
+  };
+
   // Build high fidelity steps representation dynamically
   const steps = useMemo(() => {
     if (_testRun?.test_results && _testRun.test_results.length > 0) {
       return _testRun.test_results.map((res: any, index: number) => {
-        const parts = res.test_name.split('::');
-        const testFuncName = parts[parts.length - 1];
+        const testFuncName = parsePlaywrightTitle(res.test_name);
+        const filePath = _testRun.test_case?.file_path || res.test_name.split('::')[0] || '';
+        const fileName = filePath.split('/').pop() || '';
         return {
           id: index + 1,
-          action: `Execute Pytest assertion: ${testFuncName}`,
+          index,
+          action: isUiTest ? testFuncName : `Execute Pytest assertion: ${testFuncName}`,
+          file: fileName,
           expected: _testRun.test_case?.expected_result || 'Test assertions execute and return exit status 0 (passed)',
           actual: res.status === 'passed' ? 'Passed (Success)' : 'Failed',
           status: res.status === 'passed' ? 'passed' : 'failed',
           duration: `${res.duration.toFixed(3)}s`,
-          errorDetail: res.error_message || undefined
+          errorDetail: res.error_message || undefined,
+          screenshot_path: res.screenshot_path as string | undefined,
         };
       });
     }
@@ -164,7 +194,69 @@ export default function TestRunDetail() {
     
     // Removed mock steps fallback
     return [];
-  }, [_testRun]);
+  }, [_testRun, isUiTest]);
+
+  const uiStepTimeline = useMemo(() => {
+    if (!isUiTest || !apiInteractionLogs?.length) return [];
+    const uiSteps = apiInteractionLogs.filter(
+      (log: { method?: string; screenshot_path?: string }) =>
+        log.method === 'UI_STEP' && log.screenshot_path
+    );
+    if (uiSteps.length === 0) return [];
+    return uiSteps.map(
+      (
+        log: { url?: string; screenshot_path?: string; status_code?: number },
+        index: number
+      ) => ({
+        id: index + 1,
+        index,
+        action: log.url || `Step ${index + 1}`,
+        file: '',
+        expected: _testRun?.test_case?.expected_result || '',
+        actual:
+          log.status_code && log.status_code >= 400 ? 'Failed' : 'Passed (Success)',
+        status: log.status_code && log.status_code >= 400 ? 'failed' : 'passed',
+        duration: '',
+        screenshot_path: log.screenshot_path,
+      })
+    );
+  }, [apiInteractionLogs, isUiTest, _testRun]);
+
+  const displaySteps = useMemo(
+    () => (uiStepTimeline.length > 0 ? uiStepTimeline : steps),
+    [uiStepTimeline, steps]
+  );
+
+  const networkLogs = useMemo(
+    () =>
+      apiInteractionLogs.filter(
+        (log: { method?: string }) => log.method !== 'UI_STEP'
+      ),
+    [apiInteractionLogs]
+  );
+
+  const stepScreenshots = useMemo(
+    () => displaySteps.filter((s: any) => s.screenshot_path),
+    [displaySteps]
+  );
+
+  const activeScreenshotPath =
+    displaySteps[selectedStepIndex]?.screenshot_path ||
+    stepScreenshots[0]?.screenshot_path ||
+    _testRun?.test_results?.[0]?.screenshot_path;
+
+  const buildScreenshotUrl = (path?: string) =>
+    path ? `${apiBaseUrl}${path}` : undefined;
+
+  useEffect(() => {
+    if (selectedStepIndex >= displaySteps.length) {
+      setSelectedStepIndex(0);
+    }
+  }, [displaySteps.length, selectedStepIndex]);
+
+  useEffect(() => {
+    setScreenshotZoom(100);
+  }, [selectedStepIndex, activeScreenshotPath]);
 
   return (
     <div className="trd-container">
@@ -185,7 +277,7 @@ export default function TestRunDetail() {
                 {_testRun?.status ? _testRun.status.toUpperCase() : 'PENDING'}
               </span>
               <span className="text-xs text-[#8C8C8C] font-bold">
-                ID: {_testRun?.id ? `TR-${_testRun.id}` : 'TR-8842'}
+                ID: TR-{_testRun?.id || 'N/A'}
               </span>
             </div>
             <h2 className="text-2xl font-black text-[#1F1F1F] tracking-tight mt-1">
@@ -207,7 +299,7 @@ export default function TestRunDetail() {
           <Button 
             className="trd-rerun-btn"
             onPress={() => {
-              const tcId = _testRun?.test_results?.[0]?.test_case_id || 1;
+              const tcId = _testRun?.test_case_id || _testRun?.test_case?.id || 1;
               rerunMutation.mutate(tcId);
             }}
             isDisabled={rerunMutation.isPending}
@@ -238,18 +330,32 @@ export default function TestRunDetail() {
             <CardContent className="p-0 space-y-4">
               <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3">
                 <h3 className="text-sm font-extrabold text-[#1F1F1F]">Step-by-step execution</h3>
-                <span className="text-xs text-[#8C8C8C] font-semibold">Total Execution: 4.2s</span>
+                <span className="text-xs text-[#8C8C8C] font-semibold">
+                  Total Execution: {(_testRun?.test_results?.reduce((sum: number, r: any) => sum + (r.duration || 0), 0) || 0).toFixed(2)}s
+                </span>
               </div>
 
               {/* TIMELINE LIST */}
               <div className="space-y-4 pt-1">
-                {steps.length > 0 ? (
-                  steps.map((step) => {
+                {displaySteps.length > 0 ? (
+                  displaySteps.map((step: any) => {
                     const isFailed = step.status === 'failed';
+                    const isSelected = step.index === selectedStepIndex;
                     return (
                       <div 
                         key={step.id}
-                        className={isFailed ? 'trd-step-item-failed' : 'trd-step-item-passed'}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedStepIndex(step.index)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedStepIndex(step.index);
+                          }
+                        }}
+                        className={`${isFailed ? 'trd-step-item-failed' : 'trd-step-item-passed'} ${
+                          isSelected ? 'ring-2 ring-[#1677FF] ring-offset-1' : 'cursor-pointer'
+                        }`}
                       >
                         {/* Flex header row */}
                         <div className="flex items-start gap-4">
@@ -258,15 +364,18 @@ export default function TestRunDetail() {
                             {step.id}
                           </div>
 
-                          {/* Content Grid */}
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                          {/* Content Grid (Stacked vertically) */}
+                          <div className="flex-1 grid grid-cols-1 gap-3">
                             <div>
                               <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">ACTION</span>
-                              <span className="text-sm font-bold text-[#1F1F1F] block mt-0.5">{step.action}</span>
+                              <span className="text-sm font-bold text-[#1F1F1F] block mt-0.5 break-words">{step.action}</span>
+                              {step.file && (
+                                <span className="text-[10px] text-[#1677FF] font-mono mt-0.5 block">File: {step.file}</span>
+                              )}
                             </div>
                             <div>
                               <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">EXPECTED RESULT</span>
-                              <span className="text-xs font-semibold text-[#595959] block mt-0.5 leading-relaxed">{step.expected}</span>
+                              <span className="text-xs font-semibold text-[#595959] block mt-0.5 leading-relaxed break-words">{step.expected}</span>
                             </div>
                             <div>
                               <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">ACTUAL RESULT</span>
@@ -287,9 +396,30 @@ export default function TestRunDetail() {
                           </div>
                         </div>
 
+                        {/* Per-step screenshot thumbnail (UI tests) */}
+                        {step.screenshot_path && (
+                          <div className="mt-4 border border-[#EDEDED] rounded-lg overflow-hidden bg-zinc-50">
+                            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#EDEDED] bg-white">
+                              <ImageIcon size={14} className="text-[#1677FF]" />
+                              <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider">
+                                Step screenshot — {step.action}
+                              </span>
+                            </div>
+                            <img
+                              src={buildScreenshotUrl(step.screenshot_path)}
+                              alt={`Screenshot: ${step.action}`}
+                              className="w-full max-h-48 object-contain object-top bg-zinc-950"
+                              onError={(e) => {
+                                e.currentTarget.src =
+                                  'https://placehold.co/800x400/0f172a/64748b?text=Screenshot+Not+Found';
+                              }}
+                            />
+                          </div>
+                        )}
+
                         {/* Stacktrace card if failed */}
                         {isFailed && step.errorDetail && (
-                          <div className="trd-step-error-detail">
+                          <div className="trd-step-error-detail whitespace-pre-wrap overflow-x-auto max-h-96">
                             {step.errorDetail}
                           </div>
                         )}
@@ -317,22 +447,24 @@ export default function TestRunDetail() {
           </Card>
 
           {/* API NETWORK LOGS / NETWORK ACTIVITY */}
-          {apiInteractionLogs && apiInteractionLogs.length > 0 && (
+          {networkLogs && networkLogs.length > 0 && (
             <Card className="trd-step-card">
               <CardContent className="p-0 space-y-4">
                 <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3">
                   <div className="flex items-center gap-2">
                     <Globe size={16} className="text-[#1677FF]" />
-                    <h3 className="text-sm font-extrabold text-[#1F1F1F]">API Network Activity</h3>
+                    <h3 className="text-sm font-extrabold text-[#1F1F1F]">
+                      {isUiTest ? "UI Interaction Steps" : "API Network Activity"}
+                    </h3>
                   </div>
                   <span className="text-xs text-[#1677FF] bg-[#1677FF]/10 px-2.5 py-0.5 rounded-full font-bold font-sans">
-                    {apiInteractionLogs.length} request(s) captured
+                    {networkLogs.length} {isUiTest ? "step(s)" : "request(s)"} captured
                   </span>
                 </div>
 
                 {/* API Request List */}
                 <div className="space-y-3 pt-1">
-                  {apiInteractionLogs.map((log: any, idx: number) => {
+                  {networkLogs.map((log: any, idx: number) => {
                     const isExpanded = expandedRequest === idx;
                     const isSuccess = log.status_code >= 200 && log.status_code < 300;
                     
@@ -341,6 +473,7 @@ export default function TestRunDetail() {
                     if (log.method === "POST") methodClass = "bg-emerald-50 text-emerald-600 border border-emerald-100";
                     if (log.method === "PUT" || log.method === "PATCH") methodClass = "bg-amber-50 text-amber-600 border border-amber-100";
                     if (log.method === "DELETE") methodClass = "bg-rose-50 text-rose-600 border border-rose-100";
+                    if (log.method === "UI_ACTION") methodClass = "bg-purple-50 text-purple-600 border border-purple-100";
 
                     // URL parser helper
                     let displayUrl = log.url;
@@ -393,16 +526,20 @@ export default function TestRunDetail() {
                           <div className="p-4 border-t border-[#EDEDED] bg-zinc-50/30 space-y-4 font-mono text-xs text-[#595959]">
                             {/* Request Payload */}
                             <div className="space-y-1.5">
-                              <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">Request Payload</span>
-                              <pre className="bg-zinc-900 text-zinc-100 p-3 rounded-lg overflow-x-auto text-[11px] leading-relaxed max-h-48 overflow-y-auto">
+                              <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">
+                                {isUiTest ? "Action Details" : "Request Payload"}
+                              </span>
+                              <pre className="bg-zinc-900 text-zinc-100 p-3 rounded-lg overflow-x-auto text-[11px] leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">
                                 {formatJson(log.request_body)}
                               </pre>
                             </div>
 
                             {/* Response Body */}
                             <div className="space-y-1.5">
-                              <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">Response Payload</span>
-                              <pre className="bg-zinc-900 text-zinc-100 p-3 rounded-lg overflow-x-auto text-[11px] leading-relaxed max-h-64 overflow-y-auto">
+                              <span className="text-[10px] font-extrabold text-[#8C8C8C] uppercase tracking-wider block">
+                                {isUiTest ? "Action Result" : "Response Payload"}
+                              </span>
+                              <pre className="bg-zinc-900 text-zinc-100 p-3 rounded-lg overflow-x-auto text-[11px] leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap">
                                 {formatJson(log.response_body)}
                               </pre>
                             </div>
@@ -417,79 +554,133 @@ export default function TestRunDetail() {
           )}
 
           {/* SCREENSHOT VIEW FOR UI TESTS ONLY */}
-          {isUiTest && (
+          {(activeScreenshotPath || stepScreenshots.length > 0 || isUiTest) && (
             <Card className="trd-screenshot-card">
               <CardContent className="p-0 space-y-4">
                 <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3">
-                  <h3 className="text-sm font-extrabold text-[#1F1F1F]">
-                    {isPassed ? "Screenshot (Passed Status)" : "Screenshot (At Failure)"}
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-[#1F1F1F]">
+                      {stepScreenshots.length > 1
+                        ? `Screenshots (${stepScreenshots.length} steps)`
+                        : isPassed
+                          ? 'Screenshot (Passed)'
+                          : 'Screenshot (At Failure)'}
+                    </h3>
+                    {displaySteps[selectedStepIndex] && (
+                      <p className="text-xs text-[#8C8C8C] font-semibold mt-0.5">
+                        Step: {displaySteps[selectedStepIndex].action}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
-                    <Button 
-                      className="w-8 h-8 min-w-8 p-0 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md"
-                      aria-label="Maximize screenshot"
-                    >
-                      <Maximize2 size={14} />
-                    </Button>
-                    <Button 
-                      className="w-8 h-8 min-w-8 p-0 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md"
-                      aria-label="Download screenshot"
-                    >
-                      <Download size={14} />
-                    </Button>
+                    {activeScreenshotPath && (
+                      <>
+                        <Button
+                          className="w-8 h-8 min-w-8 p-0 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md"
+                          aria-label="Zoom out screenshot"
+                          isDisabled={screenshotZoom <= SCREENSHOT_ZOOM_MIN}
+                          onPress={() =>
+                            setScreenshotZoom((z) =>
+                              Math.max(z - SCREENSHOT_ZOOM_STEP, SCREENSHOT_ZOOM_MIN)
+                            )
+                          }
+                        >
+                          <ZoomOut size={14} />
+                        </Button>
+                        <Button
+                          className="h-8 min-w-[3rem] px-2 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md text-xs font-bold"
+                          aria-label="Reset screenshot size"
+                          onPress={() => setScreenshotZoom(100)}
+                        >
+                          {screenshotZoom}%
+                        </Button>
+                        <Button
+                          className="w-8 h-8 min-w-8 p-0 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md"
+                          aria-label="Zoom in screenshot"
+                          isDisabled={screenshotZoom >= SCREENSHOT_ZOOM_MAX}
+                          onPress={() =>
+                            setScreenshotZoom((z) =>
+                              Math.min(z + SCREENSHOT_ZOOM_STEP, SCREENSHOT_ZOOM_MAX)
+                            )
+                          }
+                        >
+                          <ZoomIn size={14} />
+                        </Button>
+                        <Button
+                          className="w-8 h-8 min-w-8 p-0 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md"
+                          aria-label="Reset screenshot to fit"
+                          onPress={() => setScreenshotZoom(100)}
+                        >
+                          <RotateCcw size={14} />
+                        </Button>
+                        <a
+                          href={buildScreenshotUrl(activeScreenshotPath)}
+                          download
+                          className="w-8 h-8 min-w-8 p-0 bg-transparent text-[#595959] hover:bg-zinc-100 rounded-md flex items-center justify-center"
+                          aria-label="Download screenshot"
+                        >
+                          <Download size={14} />
+                        </a>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Spectacular Screenshot Container */}
-                <div className="trd-screenshot-container">
-                  {isPassed ? (
-                    <>
-                      {/* Simulated UI capture for PASSED state */}
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-600 via-indigo-900 to-slate-950 opacity-95" />
-                      
-                      {/* Viewport UI lines */}
-                      <div className="trd-screenshot-header">
-                        <div className="flex gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                        </div>
-                        <div className="trd-screenshot-address">
-                          {_testRun?.test_case?.file_path?.includes('class') 
-                            ? "http://localhost:3000/dashboard/classes" 
-                            : _testRun?.test_case?.file_path?.includes('student')
-                            ? "http://localhost:3000/dashboard/students"
-                            : "http://localhost:3000/dashboard"
-                          }
-                        </div>
-                      </div>
+                {stepScreenshots.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {stepScreenshots.map((step: any) => (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setSelectedStepIndex(step.index)}
+                        className={`flex-shrink-0 rounded-lg border-2 overflow-hidden transition-all ${
+                          step.index === selectedStepIndex
+                            ? 'border-[#1677FF] shadow-md'
+                            : 'border-[#EDEDED] opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <img
+                          src={buildScreenshotUrl(step.screenshot_path)}
+                          alt={step.action}
+                          className="h-16 w-28 object-cover object-top bg-zinc-900"
+                        />
+                        <span className="block text-[9px] font-bold text-[#595959] px-1 py-0.5 truncate max-w-[7rem] bg-white">
+                          Step {step.id}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-                      {/* Big success icon centered */}
-                      <div className="trd-screenshot-overlay">
-                        <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-500 shadow-lg">
-                          <CheckCircle size={48} className="stroke-[2]" />
-                        </div>
-                        <div className="text-center">
-                          <span className="text-sm font-black text-white tracking-wide block uppercase">
-                            {_testRun?.test_case?.file_path?.includes('class') 
-                              ? "CLASSES MANAGEMENT VIEWPORT LOADED" 
-                              : _testRun?.test_case?.file_path?.includes('student')
-                              ? "STUDENT RECORD DIRECTORY LOADED"
-                              : "EDUMASTER PORTAL DASHBOARD STABLE"
-                            }
-                          </span>
-                          <span className="text-[10px] text-emerald-400 font-semibold font-mono mt-1 block">
-                            PORTAL VIEWPORT VALIDATED AND CAPTURED SUCCESSFULLY (HTTP 200 OK)
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Absolute bottom tags overlay */}
-                      <div className="absolute bottom-3 left-4 right-4 flex justify-between text-[10px] text-zinc-400 font-mono font-bold">
-                        <span>URL: http://localhost:3000/dashboard</span>
-                        <span>Captured At: {new Date(_testRun?.finished_at || Date.now()).toLocaleString()}</span>
-                      </div>
-                    </>
+                {/* Main screenshot viewer (selected step) */}
+                <div className="trd-screenshot-container trd-screenshot-viewport">
+                  {activeScreenshotPath ? (
+                    <div className="trd-screenshot-zoom-wrap">
+                      <img
+                        src={buildScreenshotUrl(activeScreenshotPath)}
+                        alt={steps[selectedStepIndex]?.action || 'Test Result Screenshot'}
+                        className="trd-screenshot-image rounded-lg"
+                        style={{ width: `${screenshotZoom}%` }}
+                        onError={(e) => {
+                          e.currentTarget.src =
+                            'https://placehold.co/800x600/0f172a/64748b?text=Screenshot+Not+Found';
+                        }}
+                      />
+                    </div>
+                  ) : (_testRun?.status === 'running' || _testRun?.status === 'pending') ? (
+                    <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center text-zinc-400 space-y-3 rounded-lg">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1677FF]"></div>
+                      <span className="text-xs font-semibold">Waiting for test execution to complete...</span>
+                    </div>
+                  ) : isPassed ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 space-y-3 rounded-lg p-6 text-center">
+                      <ImageIcon size={40} className="text-zinc-500" />
+                      <span className="text-sm font-bold text-zinc-300">No UI screenshot captured</span>
+                      <span className="text-xs text-zinc-500 max-w-sm">
+                        The test passed but no screenshot file was saved. Restart qa-backend
+                        (or re-run the test) so labelled step screenshots can be attached.
+                      </span>
+                    </div>
                   ) : (
                     <>
                       {/* Simulated UI capture for FAILED state */}
@@ -503,7 +694,7 @@ export default function TestRunDetail() {
                           <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
                         </div>
                         <div className="trd-screenshot-address">
-                          https://dev.testops.app/auth/callback?error=server_error
+                          {_testRun?.url || "http://localhost:3000/error-boundary"}
                         </div>
                       </div>
 
@@ -513,14 +704,18 @@ export default function TestRunDetail() {
                           <AlertCircle size={48} className="stroke-[2]" />
                         </div>
                         <div className="text-center">
-                          <span className="text-sm font-black text-white tracking-wide block">AUTHENTICATION BRIDGE ERROR</span>
-                          <span className="text-[10px] text-zinc-400 font-semibold font-mono mt-1 block">CALLBACK STATE VALIDATION MISMATCH</span>
+                          <span className="text-sm font-black text-white tracking-wide block uppercase">
+                            {_testRun?.id ? `TEST EXECUTION FAILED (${_testRun.id})` : "TEST EXECUTION FAILED"}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-semibold font-mono mt-1 block">
+                            {_testRun?.duration ? `VIEWPORT STATE CAPTURED AFTER ${_testRun.duration.toFixed(2)}s` : "VIEWPORT STATE CAPTURED DURING ASSERTION ERROR"}
+                          </span>
                         </div>
                       </div>
 
                       {/* Absolute bottom tags overlay matching image */}
                       <div className="absolute bottom-3 left-4 right-4 flex justify-between text-[10px] text-zinc-500 font-mono font-bold">
-                        <span>URL: https://dev.testops.app/auth/callback?error=server_error</span>
+                        <span>URL: {_testRun?.url || "http://localhost:3000/error-boundary"}</span>
                         <span>Timestamp: {new Date(_testRun?.finished_at || Date.now()).toLocaleString()}</span>
                       </div>
                     </>
@@ -534,58 +729,6 @@ export default function TestRunDetail() {
         {/* RIGHT COLUMN: RUN METADATA & LIVE TERMINAL & LABELS */}
         <div className="space-y-6">
           
-          {/* ENVIRONMENT VIEWPORT CARD */}
-          <Card className="trd-env-card">
-            <CardContent className="p-0 space-y-4">
-              <div className="flex items-center gap-2 border-b border-[#F0F0F0] pb-3">
-                <Server size={16} className="text-[#1677FF]" />
-                <h3 className="text-sm font-extrabold text-[#1F1F1F]">Environment</h3>
-              </div>
-
-              {/* Viewport Card layout representing the screenshot fail layout */}
-              <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 space-y-3">
-                {/* Small Screen Mock Frame */}
-                <div className="trd-env-mock-frame">
-                  {!isUiTest ? (
-                    <div className="absolute inset-0 bg-emerald-500/5 flex flex-col items-center justify-center space-y-1">
-                      <Server size={24} className="text-emerald-500 stroke-[1.5]" />
-                      <div className="bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-sans">API Online</div>
-                    </div>
-                  ) : isPassed ? (
-                    <div className="absolute inset-0 bg-emerald-500/5 flex flex-col items-center justify-center space-y-1">
-                      <ImageIcon size={24} className="text-emerald-500 stroke-[1.5]" />
-                      <div className="bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-sans">UI Captured</div>
-                    </div>
-                  ) : (
-                    <div className="absolute inset-0 bg-red-500/5 flex flex-col items-center justify-center space-y-1">
-                      <AlertCircle size={24} className="text-red-500 stroke-[1.5]" />
-                      <div className="bg-red-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-sans">Failure Capt.</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Properties list */}
-                <div className="space-y-2 text-xs font-semibold">
-                  <div className="flex justify-between">
-                    <span className="text-[#8C8C8C]">Browser</span>
-                    <span className="text-[#1F1F1F]">--</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8C8C8C]">OS</span>
-                    <span className="text-[#1F1F1F]">--</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8C8C8C]">Region</span>
-                    <span className="text-[#1F1F1F]">--</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8C8C8C]">Agent ID</span>
-                    <span className="text-mono text-[#1677FF]">--</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           {/* TERMINAL OUTPUT PORT CARD */}
           <Card className="trd-terminal-card">
@@ -651,23 +794,6 @@ export default function TestRunDetail() {
             </Card>
           )}
 
-          {/* LABELS BADGES COMPONENT */}
-          <Card className="trd-labels-card">
-            <CardContent className="p-0 space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#F0F0F0] pb-3">
-                <Tag size={15} className="text-[#1677FF]" />
-                <h3 className="text-sm font-extrabold text-[#1F1F1F]">Labels</h3>
-              </div>
-
-              {/* Flex wrapped badges */}
-              <div className="flex flex-wrap gap-2 pt-1 font-semibold text-xs">
-                <span className="trd-label-badge-blue">regression</span>
-                <span className="trd-label-badge-blue">security</span>
-                <span className="trd-label-badge-blue">oauth2</span>
-                <span className="trd-label-badge-yellow">p0-blocker</span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

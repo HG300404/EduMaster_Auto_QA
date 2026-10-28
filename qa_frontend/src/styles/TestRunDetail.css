@@ -68,6 +68,18 @@
   @apply relative w-full aspect-video bg-zinc-950 rounded-xl overflow-hidden flex items-center justify-center border border-[#EDEDED];
 }
 
+.trd-screenshot-viewport {
+  @apply overflow-auto;
+}
+
+.trd-screenshot-zoom-wrap {
+  @apply flex min-w-full min-h-full items-start justify-center p-3;
+}
+
+.trd-screenshot-image {
+  @apply h-auto max-w-none object-contain transition-[width] duration-200 ease-out;
+}
+
 .trd-screenshot-header {
   @apply absolute top-0 inset-x-0 h-8 border-b border-zinc-800 bg-zinc-900 flex items-center px-4 gap-2;
 }

@@ -17,9 +17,21 @@ export class LoginPage {
         await this.page.goto('/login');
     }
 
-    async login(email: string, pass: string) {
+    async fillCredentials(email: string, pass: string) {
         await this.emailInput.fill(email);
         await this.passwordInput.fill(pass);
+    }
+
+    async submitLoginForm() {
         await this.loginBtn.click();
+    }
+
+    /** Successful login — waits for redirect to /admin. */
+    async login(email: string, pass: string) {
+        await this.fillCredentials(email, pass);
+        await Promise.all([
+            this.page.waitForURL(/\/admin/, { timeout: 20000 }),
+            this.submitLoginForm(),
+        ]);
     }
 }

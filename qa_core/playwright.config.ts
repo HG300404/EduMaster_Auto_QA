@@ -11,12 +11,13 @@ export default defineConfig({
   workers: process.env.CI ? 4 : 2,
   reporter: [
     ['html', { open: 'never' }],
-    ['junit', { outputFile: 'reports/ui-results.xml' }]
+    ['json', { outputFile: process.env.PLAYWRIGHT_JSON_OUTPUT_NAME || 'reports/ui-results.json' }],
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:5173',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
+    // Full-page captures run in tests/ui/fixtures.ts afterEach (QA portal per-step viewer)
+    screenshot: 'off',
     video: 'off',
   },
   projects: [

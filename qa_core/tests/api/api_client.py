@@ -25,14 +25,28 @@ class APIClient:
         self.logs.append(log_entry)
         return response
 
+    def _execute_request(self, method, url, **kwargs):
+        try:
+            response = self.session.request(method, url, **kwargs)
+            return self._log_request(response)
+        except Exception as e:
+            req_body = kwargs.get("json") or kwargs.get("data")
+            self.logs.append({
+                "method": method.upper(),
+                "url": url,
+                "request_body": str(req_body) if req_body else None,
+                "status_code": 500,
+                "response_body": f"Network Error: {str(e)}"
+            })
+            raise
+
     def login(self, email, password):
         url = f"{self.base_url}/api/auth/login"
         payload = {
             "email": email,
             "password": password
         }
-        response = self.session.post(url, json=payload, timeout=10)
-        self._log_request(response)
+        response = self._execute_request("POST", url, json=payload, timeout=10)
         if response.status_code == 200:
             self.token = response.json().get('access_token')
             self.session.headers.update({"Authorization": f"Bearer {self.token}"})
@@ -40,20 +54,16 @@ class APIClient:
 
     def get(self, endpoint, **kwargs):
         url = f"{self.base_url}{endpoint}"
-        response = self.session.get(url, **kwargs)
-        return self._log_request(response)
+        return self._execute_request("GET", url, **kwargs)
 
     def post(self, endpoint, data=None, json=None, **kwargs):
         url = f"{self.base_url}{endpoint}"
-        response = self.session.post(url, data=data, json=json, **kwargs)
-        return self._log_request(response)
+        return self._execute_request("POST", url, data=data, json=json, **kwargs)
 
     def put(self, endpoint, data=None, json=None, **kwargs):
         url = f"{self.base_url}{endpoint}"
-        response = self.session.put(url, data=data, json=json, **kwargs)
-        return self._log_request(response)
+        return self._execute_request("PUT", url, data=data, json=json, **kwargs)
 
     def delete(self, endpoint, **kwargs):
         url = f"{self.base_url}{endpoint}"
-        response = self.session.delete(url, **kwargs)
-        return self._log_request(response)
+        return self._execute_request("DELETE", url, **kwargs)

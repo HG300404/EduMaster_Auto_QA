@@ -4,15 +4,15 @@ import {
   LayoutDashboard,
   ListTodo,
   History,
-  Smartphone,
-  BarChart3,
   BookOpen,
   HelpCircle,
   ChevronLeft,
   ChevronRight,
   Activity,
   LogOut,
-  User
+  User,
+  Shield,
+  ClipboardList
 } from 'lucide-react';
 import { useGlobalStore } from '../store';
 
@@ -30,7 +30,7 @@ const BaseLayout: React.FC<BaseLayoutProps> = ({ children }) => {
 
   // Custom Dropdown Open States
   const [userOpen, setUserOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ full_name?: string; email?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ full_name?: string; email?: string; role?: string } | null>(null);
 
   // References for clicking outside dropdowns
   const userRef = useRef<HTMLDivElement>(null);
@@ -61,13 +61,20 @@ const BaseLayout: React.FC<BaseLayoutProps> = ({ children }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const menuItems = [
+  const menuItems: { name: string; path: string; icon: any; disabled?: boolean }[] = [
     { name: 'OVERVIEW', path: '/', icon: LayoutDashboard },
     { name: 'TEST CASES', path: '/testcases', icon: ListTodo },
     { name: 'EXECUTION HISTORY', path: '/history', icon: History },
   ];
 
-  const bottomItems = [
+  if (currentUser?.role === 'admin') {
+    menuItems.push(
+      { name: 'USER MANAGEMENT', path: '/admin/users', icon: Shield },
+      { name: 'SYSTEM AUDIT LOGS', path: '/admin/audit', icon: ClipboardList }
+    );
+  }
+
+  const bottomItems: { name: string; path: string; icon: any; disabled?: boolean }[] = [
     { name: 'DOCUMENTATION', path: '/docs', icon: BookOpen },
     { name: 'SUPPORT', path: '/support', icon: HelpCircle },
   ];
@@ -178,6 +185,8 @@ const BaseLayout: React.FC<BaseLayoutProps> = ({ children }) => {
               {location.pathname.startsWith('/testrun') && 'Test Execution Log'}
               {location.pathname === '/docs' && 'Technical Documentation'}
               {location.pathname === '/support' && 'Get System Support'}
+              {location.pathname === '/admin/users' && 'User Management'}
+              {location.pathname === '/admin/audit' && 'System Audit Logs'}
             </span>
           </div>
 

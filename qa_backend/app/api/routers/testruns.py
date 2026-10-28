@@ -29,16 +29,30 @@ async def trigger_test_run(
     )
 
 @router.get("", response_model=APIResponse[List[TestRunDetailResponse]])
-async def get_test_runs(limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db)):
+async def get_test_runs(
+    limit: int = 100, 
+    offset: int = 0, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     runs = await testrun_service.get_list(db, limit, offset)
     return APIResponse(success=True, data=runs)
 
 @router.get("/history", response_model=APIResponse[List[TestRunHistoryItem]])
-async def get_test_runs_history(limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db)):
+async def get_test_runs_history(
+    limit: int = 100, 
+    offset: int = 0, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     history_items = await testrun_service.get_history_list(db, limit, offset)
     return APIResponse(success=True, data=history_items)
 
 @router.get("/{id}", response_model=APIResponse[TestRunDetailResponse])
-async def get_test_run(id: int, db: AsyncSession = Depends(get_db)):
+async def get_test_run(
+    id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     run = await testrun_service.get_by_id(db, id)
     return APIResponse(success=True, data=run)

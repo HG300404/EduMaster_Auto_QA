@@ -54,7 +54,16 @@ export interface TestCase {
   title: string;
   status: 'active' | 'draft';
   file_path: string;
+  function_name?: string | null;
+  expected_result?: string | null;
   created_at: string;
+  recent_result?: RecentRunSummary | null;
+}
+
+export interface RecentRunSummary {
+  test_run_id: number;
+  status: 'passed' | 'failed' | 'running' | 'pending';
+  run_at: string;
 }
 
 export interface TestSuite {
@@ -72,6 +81,9 @@ export interface TestResult {
   duration: number;
   error_message: string | null;
   log_file_path: string | null;
+  execution_data?: string | null;
+  screenshot_path?: string | null;
+  steps_data?: string | null;
   created_at: string;
 }
 
@@ -83,6 +95,9 @@ export interface TestRun {
   finished_at: string | null;
   test_results?: TestResult[];
   test_case?: TestCase | null;
+  logs?: string[];
+  url?: string | null;
+  duration?: number | null;
 }
 
 export interface TestRunHistoryItem {
@@ -95,6 +110,22 @@ export interface TestRunHistoryItem {
   date_formatted: string;
   duration_formatted: string;
   duration_seconds: number;
+}
+
+export interface User {
+  id: number;
+  full_name: string | null;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: number;
+  user_id: number | null;
+  action: string;
+  details: string | null;
+  timestamp: string;
 }
 
 // API Functions
@@ -150,6 +181,27 @@ export const api = {
 
   register: async (payload: any): Promise<any> => {
     const res = await apiClient.post<APIResponse<any>>('/auth/register', payload);
+    return res.data.data;
+  },
+
+  // Admin Operations
+  getUsers: async (limit = 100, offset = 0): Promise<User[]> => {
+    const res = await apiClient.get<APIResponse<User[]>>('/auth/users', { params: { limit, offset } });
+    return res.data.data;
+  },
+
+  updateUserRole: async (userId: number, role: string): Promise<User> => {
+    const res = await apiClient.put<APIResponse<User>>(`/auth/users/${userId}/role`, { role });
+    return res.data.data;
+  },
+
+  deleteUser: async (userId: number): Promise<any> => {
+    const res = await apiClient.delete<APIResponse<any>>(`/auth/users/${userId}`);
+    return res.data.data;
+  },
+
+  getAdminAuditLogs: async (limit = 100, offset = 0): Promise<AuditLog[]> => {
+    const res = await apiClient.get<APIResponse<AuditLog[]>>('/auth/audit', { params: { limit, offset } });
     return res.data.data;
   }
 };
